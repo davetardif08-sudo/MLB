@@ -414,17 +414,61 @@ class MiseOJeuMLBScraper:
         Charge une URL et extrait les événements MLB via JavaScript (DOM réel)
         puis en fallback via regex sur le HTML brut.
         """
+        # Stratégie 1 : domcontentloaded (rapide, ne attend pas networkidle)
         try:
-            await page.goto(url, wait_until='networkidle', timeout=35000)
+            await page.goto(url, wait_until='domcontentloaded', timeout=35000)
         except Exception as e:
-            print(f"  >> Timeout/erreur ({url}): {type(e).__name__}")
-            try:
-                # Attendre quelques secondes supplémentaires pour le rendu JS
-                await asyncio.sleep(3)
-            except Exception:
-                pass
+            print(f"  >> Timeout/erreur initial: {type(e).__name__}")
 
-        # --- Méthode 1: JavaScript sur le DOM (fonctionne même si chargé dynamiquement) ---
+        # Attendre l'apparition de N'IMPORTE QUEL lien d'événement (max 15s)
+        try:
+            await page.wait_for_selector('a[href*="evenement"]', timeout=15000)
+            print("     [OK] Liens d'événements détectés")
+        except Exception:
+            print("     [!] Aucun lien d'événement détecté après 15s")
+
+        # Attendre supplémentaire pour laisser tous les events charger
+        await asyncio.sleep(4)
+
+        # --- DIAGNOSTIC: stats du DOM ---
+        try:
+            stats = await page.evaluate("""() => {
+                const allLinks = document.querySelectorAll('a[href]');
+                const evtLinks = document.querySelectorAll('a[href*="evenement"]');
+                const baseballLinks = document.querySelectorAll('a[href*="baseball"]');
+                const mlbLinks = document.querySelectorAll('a[href*="mlb"]');
+                const bodyText = (document.body.innerText || '').slice(0, 200);
+                const title = document.title || '';
+
+                // Échantillon des 5 premiers liens d'événement
+                const sample = [];
+                for (let i = 0; i < Math.min(5, evtLinks.length); i++) {
+                    sample.push(evtLinks[i].href);
+                }
+
+                return {
+                    title: title,
+                    url: window.location.href,
+                    totalLinks: allLinks.length,
+                    eventLinks: evtLinks.length,
+                    baseballLinks: baseballLinks.length,
+                    mlbLinks: mlbLinks.length,
+                    sampleEvents: sample,
+                    bodyTextStart: bodyText
+                };
+            }""")
+            print(f"     [DOM] title={stats['title'][:60]!r}")
+            print(f"     [DOM] URL finale: {stats['url']}")
+            print(f"     [DOM] liens={stats['totalLinks']}, evenement={stats['eventLinks']}, "
+                  f"baseball={stats['baseballLinks']}, mlb={stats['mlbLinks']}")
+            if stats['sampleEvents']:
+                print(f"     [DOM] échantillon: {stats['sampleEvents'][0]}")
+            if stats['totalLinks'] < 10:
+                print(f"     [DOM] body_start={stats['bodyTextStart'][:150]!r}")
+        except Exception as e:
+            print(f"  >> Erreur diagnostic DOM: {e}")
+
+        # --- Méthode 1: JavaScript sur le DOM (cherche baseball/mlb dans href) ---
         try:
             links = await page.evaluate("""() => {
                 const anchors = document.querySelectorAll('a[href]');
@@ -450,15 +494,47 @@ class MiseOJeuMLBScraper:
                         event_data.append((eid, href.rstrip('/')))
 
             if event_data:
-                print(f"     [JS] {len(event_data)} liens baseball extraits")
+                print(f"     [JS-baseball] {len(event_data)} liens extraits")
                 return event_data
         except Exception as e:
-            print(f"  >> Erreur JS: {e}")
+            print(f"  >> Erreur JS baseball: {e}")
 
-        # --- Méthode 2: regex sur le HTML brut ---
+        # --- Méthode 2: JavaScript - récupérer TOUS les liens d'événement ---
+        # On va ensuite filtrer côté API en regardant le sport de chaque event
+        try:
+            all_events = await page.evaluate("""() => {
+                const anchors = document.querySelectorAll('a[href*="evenement"]');
+                const result = [];
+                for (const a of anchors) {
+                    result.push(a.href);
+                }
+                return result;
+            }""")
+
+            event_data = []
+            seen = set()
+            for href in all_events:
+                m = re.search(r'/evenement/(\d+)', href)
+                if m:
+                    eid = m.group(1)
+                    if eid not in seen:
+                        seen.add(eid)
+                        event_data.append((eid, href.rstrip('/')))
+
+            if event_data:
+                print(f"     [JS-all] {len(event_data)} événements totaux (sera filtré par API)")
+                return event_data
+        except Exception as e:
+            print(f"  >> Erreur JS all: {e}")
+
+        # --- Méthode 3: regex sur le HTML brut ---
         try:
             html = await page.content()
             print(f"     [HTML] taille page: {len(html)} chars")
+            # Compter occurrences de mots clés pour diagnostic
+            print(f"     [HTML] 'baseball' x{html.lower().count('baseball')}, "
+                  f"'mlb' x{html.lower().count('mlb')}, "
+                  f"'evenement' x{html.lower().count('evenement')}")
             event_data = self._extract_all_event_ids_from_html(html)
             if event_data:
                 print(f"     [Regex] {len(event_data)} événements trouvés")
