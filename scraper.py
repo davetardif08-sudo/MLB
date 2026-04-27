@@ -355,31 +355,34 @@ class MiseOJeuMLBScraper:
                 viewport={"width": 1280, "height": 900},
             )
 
-            # Charger la page principale (même approche que NHL scraper)
-            # La page contient tous les sports, on filtre par baseball dans _parse_event()
-            print("  >> Chargement de la page principale Mise-O-Jeu...")
+            # Essayer d'abord la page de baseball spécifique
+            print("  >> Chargement de la page MLB Mise-O-Jeu...")
             page = await context.new_page()
-            try:
-                await page.goto(BASE_SITE, wait_until='networkidle', timeout=30000)
-            except Exception:
-                await asyncio.sleep(2)
+            event_data = []
 
-            html    = await page.content()
-            cookies = await context.cookies()
-            for ck in cookies:
-                _API_SESSION.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
+            try:
+                await page.goto(BASE_SITE_MLB, wait_until='networkidle', timeout=30000)
+                html = await page.content()
+                event_data = self._extract_all_event_ids_from_html(html)
+            except Exception as e:
+                print(f"  >> Réseau échoué sur page MLB: {e}")
+
+            # Si aucun événement trouvé, essayer la page principale
+            if not event_data:
+                print("  >> Chargement de la page principale Mise-O-Jeu...")
+                try:
+                    await page.goto(BASE_SITE, wait_until='networkidle', timeout=30000)
+                    html = await page.content()
+                    event_data = self._extract_all_event_ids_from_html(html)
+                except Exception as e:
+                    print(f"  >> Réseau échoué sur page principale: {e}")
 
             await page.close()
 
-            # Extraire TOUS les event IDs (tous les sports)
-            # _parse_event() filtre par baseball
-            event_data = self._extract_all_event_ids(html)
-
-            # Filtrer pour garder seulement les liens avec "baseball" dans l'URL
-            event_data = [
-                (eid, url) for eid, url in event_data
-                if 'baseball' in url.lower() or 'mlb' in url.lower()
-            ]
+            # Récupérer les cookies de session pour les requests HTTP
+            cookies = await context.cookies()
+            for ck in cookies:
+                _API_SESSION.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
 
             print(f"     {len(event_data)} événements MLB trouvés")
 
@@ -442,31 +445,47 @@ class MiseOJeuMLBScraper:
         finally:
             await page.close()
 
-    def _extract_all_event_ids(self, html: str) -> list[tuple[str, str]]:
+    def _extract_all_event_ids_from_html(self, html: str) -> list[tuple[str, str]]:
         """
-        Extrait les IDs et URLs de tous les événements (même approche que NHL scraper).
-        Retourne une liste de tuples (event_id, event_url).
-
-        Supporte deux formats d'URL:
-        - Ancien: /sports/fr/en-jeux/evenement/ID/baseball/amerique-du-nord/mlb/nom
-        - Nouveau: /sports/fr/sportif/evenement/ID  (sport détecté via contexte HTML)
+        Extrait les IDs et URLs des événements MLB depuis le HTML.
+        Utilise plusieurs patterns pour couvrir différentes structures d'URL.
         """
         seen   = set()
         result = []
-
-        # Cherche les chemins relatifs dans les attributs href
-        # Pattern similaire à NHL, mais incluant baseball
         base = "https://miseojeuplus.espacejeux.com"
-        patterns = [
-            (r'href="(/sports/fr/(?:en-jeux|sportif)/evenement/(\d+)/baseball/amerique-du-nord/mlb/[^"\'<>\s]*)"',
-             "baseball"),
-        ]
 
-        for pattern, sport in patterns:
-            for path, eid in re.findall(pattern, html):
-                if eid not in seen:
-                    seen.add(eid)
-                    result.append((eid, base + path.rstrip('/')))
+        # Pattern 1: href="/sports/fr/.../evenement/ID/baseball/..."
+        pattern1 = r'href="(/sports/fr/[^"\']*evenement/(\d+)[^"\']*baseball[^"\']*)"'
+        for path, eid in re.findall(pattern1, html, re.IGNORECASE):
+            if eid not in seen:
+                seen.add(eid)
+                result.append((eid, base + path.rstrip('/')))
+
+        # Pattern 2: href="/sports/fr/.../evenement/ID/..." sur page de baseball
+        # (pour la page spécifique baseball où le sport est implicite)
+        pattern2 = r'href="(/sports/fr/baseball[^"\']*evenement/(\d+)[^"\']*)"'
+        for path, eid in re.findall(pattern2, html, re.IGNORECASE):
+            if eid not in seen:
+                seen.add(eid)
+                result.append((eid, base + path.rstrip('/')))
+
+        # Pattern 3: URLs absolues (fallback pour différentes structures)
+        pattern3 = r'(https://miseojeuplus\.espacejeux\.com[^"\']*?baseball[^"\']*?evenement/(\d+)[^\'"]*)'
+        for url, eid in re.findall(pattern3, html, re.IGNORECASE):
+            if eid not in seen:
+                seen.add(eid)
+                url_clean = url.rstrip('/').rstrip('"').rstrip("'")
+                if 'evenement' in url_clean:
+                    result.append((eid, url_clean))
+
+        # Pattern 4: URLs absolutes (version alternative)
+        pattern4 = r'(https://miseojeuplus\.espacejeux\.com[^"\']*?evenement/(\d+)[^"\']*?baseball[^\'"]*)'
+        for url, eid in re.findall(pattern4, html, re.IGNORECASE):
+            if eid not in seen:
+                seen.add(eid)
+                url_clean = url.rstrip('/').rstrip('"').rstrip("'")
+                if 'evenement' in url_clean:
+                    result.append((eid, url_clean))
 
         return result
 
