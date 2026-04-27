@@ -342,7 +342,8 @@ class MiseOJeuMLBScraper:
                 headless=self.headless,
                 args=[
                     '--disable-blink-features=AutomationControlled',
-                    '--disable-dev-shm-usage',  # Railway: no /dev/shm, use swap
+                    '--disable-dev-shm-usage',
+                    '--no-sandbox',
                 ]
             )
             context = await browser.new_context(
@@ -355,34 +356,25 @@ class MiseOJeuMLBScraper:
                 viewport={"width": 1280, "height": 900},
             )
 
-            # Essayer d'abord la page de baseball spécifique
-            print("  >> Chargement de la page MLB Mise-O-Jeu...")
             page = await context.new_page()
             event_data = []
 
-            try:
-                await page.goto(BASE_SITE_MLB, wait_until='networkidle', timeout=30000)
-                html = await page.content()
-                event_data = self._extract_all_event_ids_from_html(html)
-            except Exception as e:
-                print(f"  >> Réseau échoué sur page MLB: {e}")
+            # Tentative 1: page baseball spécifique
+            print("  >> Chargement page MLB...")
+            event_data = await self._load_and_extract(page, BASE_SITE_MLB)
 
-            # Si aucun événement trouvé, essayer la page principale
+            # Tentative 2: page principale si rien trouvé
             if not event_data:
-                print("  >> Chargement de la page principale Mise-O-Jeu...")
-                try:
-                    await page.goto(BASE_SITE, wait_until='networkidle', timeout=30000)
-                    html = await page.content()
-                    event_data = self._extract_all_event_ids_from_html(html)
-                except Exception as e:
-                    print(f"  >> Réseau échoué sur page principale: {e}")
+                print("  >> Chargement page principale...")
+                event_data = await self._load_and_extract(page, BASE_SITE)
 
-            await page.close()
-
-            # Récupérer les cookies de session pour les requests HTTP
+            # Récupérer les cookies après les visites de page
             cookies = await context.cookies()
             for ck in cookies:
-                _API_SESSION.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
+                _API_SESSION.cookies.set(ck["name"], ck["value"],
+                                         domain=ck.get("domain", ""))
+
+            await page.close()
 
             print(f"     {len(event_data)} événements MLB trouvés")
 
@@ -416,6 +408,64 @@ class MiseOJeuMLBScraper:
                         matches.extend(r)
 
             return matches
+
+    async def _load_and_extract(self, page, url: str) -> list[tuple[str, str]]:
+        """
+        Charge une URL et extrait les événements MLB via JavaScript (DOM réel)
+        puis en fallback via regex sur le HTML brut.
+        """
+        try:
+            await page.goto(url, wait_until='networkidle', timeout=35000)
+        except Exception as e:
+            print(f"  >> Timeout/erreur ({url}): {type(e).__name__}")
+            try:
+                # Attendre quelques secondes supplémentaires pour le rendu JS
+                await asyncio.sleep(3)
+            except Exception:
+                pass
+
+        # --- Méthode 1: JavaScript sur le DOM (fonctionne même si chargé dynamiquement) ---
+        try:
+            links = await page.evaluate("""() => {
+                const anchors = document.querySelectorAll('a[href]');
+                const result = [];
+                for (const a of anchors) {
+                    const href = a.href || '';
+                    if (href.includes('evenement') &&
+                        (href.includes('baseball') || href.includes('mlb'))) {
+                        result.push(href);
+                    }
+                }
+                return result;
+            }""")
+
+            event_data = []
+            seen = set()
+            for href in links:
+                m = re.search(r'/evenement/(\d+)', href)
+                if m:
+                    eid = m.group(1)
+                    if eid not in seen:
+                        seen.add(eid)
+                        event_data.append((eid, href.rstrip('/')))
+
+            if event_data:
+                print(f"     [JS] {len(event_data)} liens baseball extraits")
+                return event_data
+        except Exception as e:
+            print(f"  >> Erreur JS: {e}")
+
+        # --- Méthode 2: regex sur le HTML brut ---
+        try:
+            html = await page.content()
+            print(f"     [HTML] taille page: {len(html)} chars")
+            event_data = self._extract_all_event_ids_from_html(html)
+            if event_data:
+                print(f"     [Regex] {len(event_data)} événements trouvés")
+            return event_data
+        except Exception as e:
+            print(f"  >> Erreur HTML: {e}")
+            return []
 
     async def _fetch_event_async(self, context, event_id: str, url_map: dict) -> list[Match]:
         """Récupère les cotes d'un événement via Playwright (fallback)."""
