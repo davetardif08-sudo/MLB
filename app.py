@@ -47,7 +47,7 @@ _cache = {
 }
 _lock = threading.Lock()
 
-_SCRAPE_TTL = 45 * 60  # 45 minutes (les cotes MLB ne changent pas souvent)
+_SCRAPE_TTL = 2 * 3600  # 2 heures (cotes stables, évite scraping fréquent sur Railway)
 _scrape_cache: tuple | None = None  # (list[Match], timestamp)
 _scrape_lock = threading.Lock()
 
