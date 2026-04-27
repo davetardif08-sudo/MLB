@@ -41,5 +41,5 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run the app
-CMD ["python", "app.py"]
+# Run with Gunicorn (production WSGI server)
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "300", "--access-logfile", "-", "app:app"]
