@@ -1,0 +1,3111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MLB Analyzer — Prédictions & Mises</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #21262d;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --text-dim:  #8b949e;
+    --mlb:       #22c55e;
+    --mlb-dim:   #166534;
+    --accent:    #3fb950;
+    --yellow:    #d29922;
+    --red:       #f85149;
+    --cyan:      #79c0ff;
+    --orange:    #ffa657;
+    --win:       #22c55e;
+    --loss:      #f85149;
+    --push:      #8b949e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { font-size: 26px; }
+  .logo-text h1 { font-size: 18px; font-weight: 700; color: var(--mlb); line-height: 1.2; }
+  .logo-text span { font-size: 11px; color: var(--text-dim); }
+
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+
+  .bankroll-group {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 12px;
+  }
+  .bankroll-group label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+  .bankroll-group input {
+    background: transparent; border: none; color: var(--mlb);
+    font-size: 14px; font-weight: 600; width: 75px; text-align: right; outline: none;
+  }
+
+  .btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text); cursor: pointer;
+    font-size: 13px; font-weight: 500; transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--mlb); color: var(--mlb); }
+  .btn-primary { background: var(--mlb-dim); border-color: var(--mlb); color: #fff; }
+  .btn-primary:hover { background: var(--mlb); color: #000; }
+  thead th[data-sort] { cursor:pointer; user-select:none; white-space:nowrap; }
+  thead th[data-sort]:hover { color:var(--mlb); }
+  thead th[data-sort].sorted-asc .sort-icon::after  { content:'▲'; color:var(--mlb); margin-left:4px; font-size:10px; }
+  thead th[data-sort].sorted-desc .sort-icon::after { content:'▼'; color:var(--mlb); margin-left:4px; font-size:10px; }
+  thead th[data-sort]:not(.sorted-asc):not(.sorted-desc) .sort-icon::after { content:'⇅'; color:var(--text-dim); margin-left:4px; font-size:10px; opacity:0.5; }
+  .btn-save { background: #1c2a1c; border-color: var(--mlb); color: var(--mlb); }
+  .btn-save:hover { background: var(--mlb-dim); color: #fff; }
+  .btn-save.saved { background: var(--mlb-dim); color: #fff; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Tabs ───────────────────────────────────────────────────── */
+  .tabs-nav {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+  }
+  .tab-btn {
+    padding: 12px 20px;
+    border: none; border-bottom: 2px solid transparent;
+    background: transparent; color: var(--text-dim);
+    cursor: pointer; font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--mlb); border-bottom-color: var(--mlb); }
+  .tab-badge {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 7px; font-size: 11px; color: var(--text-dim);
+  }
+  .tab-btn.active .tab-badge { background: var(--mlb-dim); border-color: var(--mlb); color: var(--mlb); }
+
+  /* ── Stats bar ──────────────────────────────────────────────── */
+  .stats-bar {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 12px; padding: 14px 24px;
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+  }
+  .stat-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-card .value { font-size: 20px; font-weight: 700; margin-top: 4px; color: var(--mlb); }
+  .stat-card .sub   { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* ── Main ───────────────────────────────────────────────────── */
+  main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+
+  .tab-panel { display: none; }
+
+  /* ── Stats tab ─────────────────────────────────────────────────── */
+  .stats-section { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px; }
+  .stats-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:12px; }
+  .stats-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .stats-table th { text-align:left; color:var(--text-dim); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
+  .stats-table td { padding:7px 8px; border-bottom:1px solid #21262d; }
+  .stats-table tr:last-child td { border-bottom:none; }
+  .stats-table tr:hover td { background:var(--bg3); }
+  .stat-global-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:14px 20px; min-width:120px; }
+  .stat-global-card .label { font-size:11px; color:var(--text-dim); margin-bottom:4px; }
+  .stat-global-card .value { font-size:22px; font-weight:700; }
+  .calib-good { color:var(--mlb); }
+  .calib-bad  { color:var(--red); }
+  .tab-panel.active { display: block; }
+
+  /* ── Kelly banner ───────────────────────────────────────────── */
+  .kelly-banner {
+    background: var(--bg2); border: 1px solid var(--mlb-dim);
+    border-radius: 10px; padding: 12px 20px; margin-bottom: 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .kelly-banner .kinfo { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+  .kelly-banner .kitem label { font-size: 11px; color: var(--text-dim); display: block; }
+  .kelly-banner .kitem .kval { font-size: 17px; font-weight: 700; color: var(--mlb); }
+
+  /* ── Tableau ────────────────────────────────────────────────── */
+  .table-wrap {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .table-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+  }
+  .table-header h2 { font-size: 14px; font-weight: 600; }
+  .count-chip {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 2px 10px; font-size: 12px; color: var(--text-dim);
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: var(--bg3); padding: 9px 14px;
+    text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-dim);
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  th.right  { text-align: right; }
+  th.center { text-align: center; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(34,197,94,0.04); }
+
+  .rank { color: var(--text-dim); font-size: 13px; font-weight: 600; }
+  .match-cell .teams  { font-weight: 600; font-size: 14px; }
+  .match-cell .meta   { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .match-cell .pitcher { font-size: 11px; color: var(--cyan); margin-top: 2px; }
+
+  .badge {
+    display: inline-block; padding: 3px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .badge-excellent { background: rgba(34,197,94,0.15);  color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+  .badge-bon       { background: rgba(63,185,80,0.10);  color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+  .badge-neutre    { background: rgba(210,153,34,0.10); color: #d29922; border: 1px solid rgba(210,153,34,0.25); }
+  .badge-eviter    { background: rgba(248,81,73,0.08);  color: #f85149; border: 1px solid rgba(248,81,73,0.2); }
+
+  .odds-low  { color: var(--cyan);   font-weight: 700; }
+  .odds-mid  { color: var(--text);   font-weight: 600; }
+  .odds-high { color: var(--yellow); font-weight: 600; }
+  .odds-very { color: var(--orange); font-weight: 600; }
+
+  .margin-good { color: var(--accent); }
+  .margin-ok   { color: var(--yellow); }
+  .margin-bad  { color: var(--red); }
+
+  .score-wrap { display: flex; align-items: center; gap: 8px; }
+  .score-bar-bg { width: 55px; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--mlb-dim), var(--mlb)); }
+  .score-num { font-size: 13px; font-weight: 700; min-width: 28px; }
+
+  .kelly-cell { text-align: right; }
+  .kelly-none  { color: var(--text-dim); }
+  .kelly-small { color: var(--yellow); font-weight: 600; }
+  .kelly-good  { color: var(--accent); font-weight: 700; }
+  .kelly-great { color: var(--mlb); font-weight: 700; font-size: 15px; }
+  .kelly-potential { font-size: 10px; color: var(--text-dim); display: block; }
+
+  /* ── Résultats d'hier ───────────────────────────────────────── */
+  .results-summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px; margin-bottom: 18px;
+  }
+  .res-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; text-align: center;
+  }
+  .res-card .rc-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .res-card .rc-val   { font-size: 24px; font-weight: 800; margin-top: 6px; }
+  .res-card.win-card  .rc-val { color: var(--win); }
+  .res-card.loss-card .rc-val { color: var(--loss); }
+  .res-card.push-card .rc-val { color: var(--push); }
+  .res-card.roi-card  .rc-val { color: var(--yellow); }
+
+  .outcome-win   { color: var(--win);   font-weight: 700; }
+  .outcome-loss  { color: var(--loss);  font-weight: 700; }
+  .outcome-push  { color: var(--push);  font-weight: 600; }
+  .outcome-pending { color: var(--text-dim); font-style: italic; }
+
+  .profit-pos { color: var(--win);  font-weight: 700; }
+  .profit-neg { color: var(--loss); font-weight: 700; }
+
+  /* ── États ──────────────────────────────────────────────────── */
+  .loading-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 70px 20px; gap: 14px; color: var(--text-dim);
+  }
+  .spinner {
+    width: 38px; height: 38px; border: 3px solid var(--border);
+    border-top-color: var(--mlb); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-state p { font-size: 14px; }
+
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--text-dim); }
+  .empty-state .icon { font-size: 42px; margin-bottom: 14px; }
+  .empty-state h3 { font-size: 15px; margin-bottom: 6px; color: var(--text); }
+
+  /* ── Toast ──────────────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 22px; right: 22px;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 18px;
+    font-size: 13px; color: var(--text);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none; z-index: 9999;
+  }
+  #toast.show { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; } }
+
+  /* ── Live tab ───────────────────────────────────────────────── */
+  .live-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+  }
+  .live-summary {
+    display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+  }
+  .live-chip {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 14px; font-size: 13px;
+  }
+  .live-chip .lc-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; }
+  .live-chip .lc-val   { font-weight: 700; font-size: 16px; margin-top: 1px; }
+  .live-score {
+    font-size: 13px; font-weight: 700; color: var(--cyan);
+    background: rgba(121,192,255,0.08); border: 1px solid rgba(121,192,255,0.2);
+    border-radius: 6px; padding: 2px 8px; display: inline-block;
+  }
+  .live-score.final   { color: var(--text-dim); background: transparent; border-color: var(--border); }
+  .live-score.live    { color: var(--mlb); background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.3); }
+  .live-score.pre     { color: var(--text-dim); font-weight: 400; }
+  .outcome-live { color: var(--mlb); font-weight: 700; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .medal-1 { color: #f0c040; font-size: 16px; }
+  .medal-2 { color: #adb5bd; font-size: 16px; }
+  .medal-3 { color: #cd7f32; font-size: 16px; }
+  .gain-pos { color: var(--win);  font-weight: 700; }
+  .gain-neg { color: var(--loss); font-weight: 700; }
+  .gain-pot { color: var(--text-dim); font-size: 11px; }
+
+  @media (max-width: 900px) {
+    header { flex-direction: column; gap: 10px; align-items: flex-start; }
+    .stats-bar { grid-template-columns: repeat(2,1fr); }
+    .score-bar-bg { display: none; }
+    td, th { padding: 7px 9px; }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ════════════════════ HEADER ════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚾</div>
+    <div class="logo-text">
+      <h1>MLB Analyzer</h1>
+      <span>Prédictions & Mises — Mise-O-Jeu</span>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div class="bankroll-group">
+      <label>Budget soir $</label>
+      <input type="number" id="max-nightly" value="10" min="1" step="1" style="width:60px"/>
+    </div>
+    <div class="bankroll-group" title="Standard = filtres actuels. Conservateur = stop-loss Phase 1 (bannit cotes &lt;1.80, totaux sans edge fort, downgrade Excellent)">
+      <label>Mode</label>
+      <select id="mode-select" style="background:#161b22;color:#c9d1d9;border:1px solid #30363d;padding:4px 6px;border-radius:4px;font-size:12px">
+        <option value="standard">Standard</option>
+        <option value="conservative">Conservateur</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-analyze" onclick="analyze()">⚾ Analyser</button>
+    <button class="btn btn-save" id="btn-snapshot" onclick="saveSnapshot()" title="Sauvegarder les paris affichés" style="display:none">💾 Sauvegarder</button>
+    <button class="btn" onclick="doRefresh()" title="Forcer un nouveau scrape">↺ Rafraîchir</button>
+    <span id="last-refresh" style="font-size:11px;color:var(--text-dim);margin-right:12px"></span>
+    <a href="{{ url_for('logout') }}" class="btn" title="Déconnexion" style="background:#6b7280;border-color:#4b5563">🚪 Déconnexion</a>
+  </div>
+</header>
+
+<!-- ════════════════════ TABS NAV ════════════════════ -->
+<div class="tabs-nav">
+  <button class="tab-btn active" onclick="switchTab('today')" id="tab-today">
+    📅 Prévisions du jour
+    <span class="tab-badge" id="badge-today">—</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('yesterday')" id="tab-yesterday">
+    📊 Résultats d'hier
+    <span class="tab-badge" id="badge-yesterday">—</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('live')" id="tab-live">
+    🔴 Live
+    <span class="tab-badge" id="badge-live">—</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('stats')" id="tab-stats">
+    📈 Statistiques
+  </button>
+  <button class="tab-btn" onclick="switchTab('comparaison')" id="tab-comparaison"
+    style="background:linear-gradient(135deg,#7c3aed22,#6d28d933);border-color:#7c3aed55;color:#a78bfa;">
+    ⚖️ Comparaison
+  </button>
+  <button class="tab-btn" onclick="switchTab('v2')" id="tab-v2"
+    style="background:linear-gradient(135deg,#0891b222,#0e749133);border-color:#0891b255;color:#22d3ee;">
+    🧪 V2 — Nouveaux Signaux
+    <span class="tab-badge" id="badge-v2" style="background:#0891b2">—</span>
+  </button>
+</div>
+
+<!-- ════════════════════ STATS BAR ════════════════════ -->
+<div class="stats-bar" id="stats-bar-today" style="display:none">
+  <div class="stat-card">
+    <div class="label">Matchs</div>
+    <div class="value" id="stat-matches">—</div>
+    <div class="sub">aujourd'hui</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Paris trouvés</div>
+    <div class="value" id="stat-picks">—</div>
+    <div class="sub" id="stat-picks-sub">— Excellent</div>
+  </div>
+</div>
+
+<div class="stats-bar" id="stats-bar-yesterday" style="display:none">
+  <div class="stat-card">
+    <div class="label">Paris joués</div>
+    <div class="value" id="ystat-total">—</div>
+    <div class="sub" id="ystat-date">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Victoires</div>
+    <div class="value" style="color:var(--win)" id="ystat-wins">—</div>
+    <div class="sub" id="ystat-losses-sub">— défaites</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">ROI (unités fixes)</div>
+    <div class="value" id="ystat-roi">—</div>
+    <div class="sub">par rapport aux mises</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Résultats manquants</div>
+    <div class="value" style="color:var(--text-dim)" id="ystat-pending">—</div>
+    <div class="sub">en attente de résultat</div>
+  </div>
+</div>
+
+<!-- ════════════════════ MAIN ════════════════════ -->
+<main>
+
+  <!-- ── ONGLET 1 : Prévisions du jour ────────────────────────── -->
+  <div class="tab-panel active" id="panel-today">
+
+    <div id="low-value-banner" style="display:none;background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.3);border-radius:10px;padding:12px 20px;margin-bottom:14px;display:none;align-items:center;gap:14px">
+      <span style="font-size:22px">⚠️</span>
+      <div>
+        <div style="font-weight:700;color:var(--red);font-size:13px">Soirée peu conseillée</div>
+        <div id="low-value-msg" style="font-size:12px;color:var(--text-dim);margin-top:2px"></div>
+      </div>
+    </div>
+
+    <!-- Combos du soir — en haut, centrés -->
+    <div id="mlb-combo-block" style="display:none;margin-bottom:20px;text-align:center">
+      <div style="font-size:13px;font-weight:700;color:#f59e0b;letter-spacing:.3px;margin-bottom:12px;text-transform:uppercase">
+        ⚾ Combos du soir
+      </div>
+      <div id="mlb-combo-cards" style="display:inline-flex;gap:14px;flex-wrap:wrap;justify-content:center"></div>
+    </div>
+
+    <div class="kelly-banner" id="kelly-banner" style="display:none">
+      <div class="kinfo">
+        <div class="kitem"><label>Fraction Kelly</label><div class="kval">0.25x conservateur</div></div>
+        <div class="kitem"><label>Budget soir</label><div class="kval" id="kb-max" style="color:var(--yellow)">$10</div></div>
+        <div class="kitem"><label>Total à miser</label><div class="kval" id="kb-total">$0</div></div>
+        <div class="kitem"><label>Paris +EV</label><div class="kval" id="kb-count">0</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);max-width:180px;text-align:right">
+        Kelly optimise le rendement à long terme selon votre avantage estimé.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-header">
+        <h2>Opportunités de paris MLB</h2>
+        <span class="count-chip" id="opp-count">—</span>
+      </div>
+
+      <div class="loading-state" id="today-idle">
+        <div style="font-size:42px">⚾</div>
+        <p>Cliquez sur « Analyser » pour charger les cotes MLB</p>
+      </div>
+      <div class="loading-state" id="today-loading" style="display:none">
+        <div class="spinner"></div>
+        <p id="loading-sub">Scraping des cotes Mise-O-Jeu…</p>
+      </div>
+      <div id="today-results" style="display:none">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th data-sort="match">MATCH <span class="sort-icon"></span></th>
+              <th data-sort="bet_type">TYPE DE PARI <span class="sort-icon"></span></th>
+              <th data-sort="selection">SÉLECTION <span class="sort-icon"></span></th>
+              <th class="center" data-sort="odds">COTE <span class="sort-icon"></span></th>
+              <th class="center" data-sort="house_margin">MARGE <span class="sort-icon"></span></th>
+              <th class="center" data-sort="value_score">SCORE VALEUR <span class="sort-icon"></span></th>
+              <th class="center" data-sort="kelly_bet">🪙 MISE /$<span id="th-budget">10</span> <span class="sort-icon"></span></th>
+              <th class="right" data-sort="retour">RETOUR POTENTIEL <span class="sort-icon"></span></th>
+              <th class="center" data-sort="recommendation">AVIS <span class="sort-icon"></span></th>
+            </tr>
+          </thead>
+          <tbody id="opps-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="today-empty" style="display:none">
+        <div class="icon">🔍</div>
+        <h3>Aucun match MLB trouvé</h3>
+        <p>Mise-O-Jeu n'affiche pas de matchs MLB en ce moment.<br>Saison régulière : avril–octobre.</p>
+      </div>
+      <div class="empty-state" id="today-error" style="display:none">
+        <div class="icon">⚠️</div>
+        <h3>Erreur de scraping</h3>
+        <p id="error-msg">Une erreur est survenue.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── ONGLET 2 : Résultats d'hier ──────────────────────────── -->
+  <div class="tab-panel" id="panel-yesterday">
+
+    <div class="loading-state" id="yesterday-loading">
+      <div class="spinner"></div>
+      <p>Chargement des résultats d'hier…</p>
+    </div>
+
+    <div id="yesterday-content" style="display:none">
+
+      <!-- Cartes récap -->
+      <div class="results-summary">
+        <div class="res-card win-card">
+          <div class="rc-label">Victoires ✅</div>
+          <div class="rc-val" id="rc-wins">—</div>
+        </div>
+        <div class="res-card loss-card">
+          <div class="rc-label">Défaites ❌</div>
+          <div class="rc-val" id="rc-losses">—</div>
+        </div>
+        <div class="res-card push-card">
+          <div class="rc-label">Nuls / Push</div>
+          <div class="rc-val" id="rc-pushes">—</div>
+        </div>
+        <div class="res-card roi-card">
+          <div class="rc-label">ROI journée</div>
+          <div class="rc-val" id="rc-roi">—</div>
+        </div>
+      </div>
+
+      <!-- Graphique gains cumulatifs -->
+      <div class="table-wrap" id="gains-chart-wrap" style="display:none">
+        <div class="table-header">
+          <h2>Gains par jour</h2>
+          <div style="display:flex;gap:8px">
+            <button class="chip-btn" id="chart-mode-bar" onclick="setChartMode('bar')" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#000;font-size:12px;cursor:pointer">Journées</button>
+            <button class="chip-btn" id="chart-mode-line" onclick="setChartMode('line')" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;cursor:pointer">Cumulatif</button>
+          </div>
+        </div>
+        <div style="position:relative;height:220px;padding:8px 0">
+          <canvas id="gains-chart"></canvas>
+        </div>
+        <div id="gains-chart-legend" style="padding:4px 16px 10px;font-size:11px;color:var(--text-dim);display:flex;gap:16px;flex-wrap:wrap">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.70);margin-right:4px"></span>Gain normal</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(239,68,68,0.70);margin-right:4px"></span>Perte normale</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(251,146,60,0.65);margin-right:4px"></span>Soirée déconseillée</span>
+        </div>
+      </div>
+
+      <!-- Tableau des résultats -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2 id="yesterday-title">Résultats d'hier</h2>
+          <span class="count-chip" id="yesterday-count">—</span>
+        </div>
+        <div id="yesterday-results-body">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Match</th>
+                <th>Type de pari</th>
+                <th>Sélection</th>
+                <th class="center">Cote</th>
+                <th class="center">Mise</th>
+                <th class="center">Prob. estimée</th>
+                <th class="center">Avis</th>
+                <th class="center">Résultat</th>
+                <th class="right">Profit (u)</th>
+              </tr>
+            </thead>
+            <tbody id="yesterday-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Combos d'hier -->
+      <div id="mlb-combo-results-block" style="display:none;margin-top:16px">
+        <div class="table-header" style="padding:0 0 10px">
+          <h2 style="margin:0">⚾ Combos d'hier</h2>
+          <span class="count-chip" id="combo-results-count">—</span>
+        </div>
+        <div id="mlb-combo-result-cards" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+      </div>
+
+    </div><!-- end yesterday-content -->
+
+    <div class="empty-state" id="yesterday-empty" style="display:none">
+      <div class="icon">📭</div>
+      <h3>Aucun snapshot disponible</h3>
+      <p id="yesterday-empty-msg">Sauvegarde le tableau avec 💾 Sauvegarder pour enregistrer tes paris du soir.<br>
+         Les résultats apparaîtront ici le lendemain.</p>
+    </div>
+
+  </div>
+
+  <!-- ══ ONGLET 3 : Statistiques ══════════════════════════════════ -->
+  <div class="tab-panel" id="panel-stats">
+
+    <div class="empty-state" id="stats-loading" style="display:none">
+      <div class="icon">⏳</div><h3>Chargement des statistiques…</h3>
+    </div>
+    <div class="empty-state" id="stats-empty" style="display:none">
+      <div class="icon">📭</div>
+      <h3>Pas encore de données historiques</h3>
+      <p>Les tableaux de performance apparaîtront après avoir sauvegardé au moins un snapshot et attendu le lendemain.</p>
+    </div>
+
+    <!-- Poids adaptatifs — toujours visible -->
+    <div id="stats-weights-panel" style="display:none;padding:0 24px 24px;max-width:1100px;margin:0 auto">
+      <div class="stats-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 class="stats-title" style="margin:0">Poids des indicateurs <span style="font-size:11px;font-weight:normal;color:var(--text-dim)">(adaptatifs)</span></h3>
+          <button class="btn btn-primary" onclick="calibrate()" id="btn-calibrate" style="font-size:12px;padding:5px 12px">
+            🔬 Recalibrer les poids
+          </button>
+        </div>
+        <p style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+          La recalibration ajuste automatiquement les poids selon les résultats historiques. Nécessite au moins 10 paris résolus avec scores de facteurs.
+        </p>
+        <table class="stats-table">
+          <thead><tr><th>Indicateur</th><th>Description</th><th style="text-align:right">Poids actuel</th><th style="text-align:right">Défaut</th></tr></thead>
+          <tbody id="stats-weights-tbody"></tbody>
+        </table>
+        <!-- stat_vs_math badge -->
+        <div id="stat-vs-math-row" style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-radius:8px;display:flex;align-items:center;justify-content:space-between;font-size:12px">
+          <div>
+            <span style="font-weight:600;color:var(--text)">stat_vs_math</span>
+            <span style="color:var(--text-dim);margin-left:8px">Poids modèle statistique vs marché (0=marché pur, 1=modèle pur)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:80px;height:5px;background:var(--bg2);border-radius:3px;overflow:hidden">
+              <div id="stat-vs-math-bar" style="width:50%;height:100%;background:#facc15;border-radius:3px"></div>
+            </div>
+            <span id="stat-vs-math-val" style="font-weight:700;color:#facc15;min-width:36px;text-align:right">0.50</span>
+            <span style="font-size:10px;color:var(--text-dim)">(auto-calibré)</span>
+          </div>
+        </div>
+        <div id="calibrate-result" style="margin-top:12px;display:none"></div>
+      </div>
+    </div>
+
+    <div id="stats-content" style="display:none;padding:0 24px 24px;max-width:1100px;margin:0 auto">
+
+      <!-- Bilan global -->
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px" id="stats-global-cards"></div>
+
+      <!-- Gain cumulatif par système (EN HAUT) -->
+      <div class="stats-section" id="stats-cumul-section" style="display:none;margin-bottom:28px">
+        <h3 class="stats-title">📈 Gain cumulatif par système ($)</h3>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px">
+          Évolution jour après jour des 6 systèmes de mise (B, C, D, E, F, Kelly).
+        </p>
+        <div style="position:relative;height:260px;margin-top:12px">
+          <canvas id="chart-gain-jour"></canvas>
+        </div>
+      </div>
+
+      <!-- Graphique : Progression du win rate soir après soir -->
+      <div class="stats-section" style="margin-bottom:28px">
+        <h3 class="stats-title">Progression du % de victoire soir après soir</h3>
+        <div style="position:relative;height:240px;margin-top:12px">
+          <canvas id="chart-winrate-progression"></canvas>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+
+        <!-- Par type de pari -->
+        <div class="stats-section">
+          <h3 class="stats-title">Par type de pari</h3>
+          <table class="stats-table">
+            <thead><tr><th>Type</th><th>Paris</th><th>V</th><th>D</th><th>%V</th><th>ROI</th></tr></thead>
+            <tbody id="stats-type-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Par recommandation -->
+        <div class="stats-section">
+          <h3 class="stats-title">Par recommandation</h3>
+          <table class="stats-table">
+            <thead><tr><th>Niveau</th><th>Paris</th><th>V</th><th>D</th><th>%V</th><th>ROI</th></tr></thead>
+            <tbody id="stats-rec-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Par fourchette de cotes -->
+        <div class="stats-section">
+          <h3 class="stats-title">Par fourchette de cotes</h3>
+          <table class="stats-table">
+            <thead><tr><th>Cotes</th><th>Paris</th><th>V</th><th>D</th><th>%V</th><th>ROI</th></tr></thead>
+            <tbody id="stats-odds-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Calibration -->
+        <div class="stats-section">
+          <h3 class="stats-title">Calibration des probabilités</h3>
+          <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Probabilité prédite vs taux de victoire réel</p>
+          <table class="stats-table">
+            <thead><tr><th>Prob. prédite</th><th>Paris</th><th>% Victoires réel</th><th>Écart</th></tr></thead>
+            <tbody id="stats-calib-tbody"></tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- Courbe de calibration -->
+      <div id="calibration-curve-panel" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:24px">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">Courbe de calibration — probabilité prédite vs taux de victoire réel</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">La diagonale parfaite = modèle parfaitement calibré. Au-dessus = sous-estimation, en dessous = sur-estimation.</div>
+        <div style="position:relative;height:220px"><canvas id="chart-calibration-curve"></canvas></div>
+        <div id="calibration-curve-insight" style="margin-top:10px;font-size:12px;color:var(--text-dim)"></div>
+      </div>
+
+      <!-- Par équipe -->
+      <div class="stats-section" style="margin-bottom:24px">
+        <h3 class="stats-title">Performance par équipe <span style="font-size:11px;font-weight:normal;color:var(--text-dim)">(min. 2 paris)</span></h3>
+        <table class="stats-table">
+          <thead><tr><th>Équipe</th><th>Paris</th><th>V</th><th>D</th><th>Nuls</th><th>%V</th><th>ROI $</th></tr></thead>
+          <tbody id="stats-team-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Impact Météo -->
+      <div class="stats-section" id="stats-weather-section" style="display:none;margin-bottom:24px">
+        <h3 class="stats-title">🌤️ Impact météo sur les totaux (Over/Under)</h3>
+        <p style="font-size:11px;color:var(--text-dim);margin-bottom:12px">Corrélation entre l'ajustement météo prédit et le résultat réel Over/Under</p>
+        <div id="stats-weather-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:16px"></div>
+        <div id="stats-weather-correlation" style="background:var(--bg);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--text-dim)"></div>
+        <div id="stats-weather-note" style="font-size:11px;color:var(--text-dim);margin-top:8px;font-style:italic"></div>
+      </div>
+
+      <!-- Historique Combos MLB -->
+      <div class="stats-section" id="stats-combos-section" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 class="stats-title">⚾ Historique Combos Même Match</h3>
+          <div id="stats-combo-summary" style="font-size:12px;color:var(--text-dim)"></div>
+        </div>
+        <div id="stats-combo-cards" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- Comparaison Standard vs Conservateur -->
+      <div class="stats-section" id="stats-modes-section" style="display:none;margin-bottom:28px">
+        <h3 class="stats-title">⚖️ Comparaison : Standard vs Conservateur</h3>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px">
+          Phase 1 (conservateur) bannit cotes &lt;1.80, totaux sans edge fort, et downgrade "Excellent".
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" id="stats-modes-cards"></div>
+        <div style="position:relative;height:250px;margin-top:12px">
+          <canvas id="chart-modes-cumul"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ ONGLET 4 : Live ═══════════════════════════════════════════ -->
+  <div class="tab-panel" id="panel-live">
+    <div id="live-container">
+      <div class="empty-state">
+        <div class="icon">🔴</div>
+        <h3>Cliquez sur l'onglet pour charger</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ONGLET 5 : Comparaison de systèmes ════════════════════════ -->
+  <div class="tab-panel" id="panel-comparaison">
+
+    <!-- Paramètres -->
+    <div style="display:flex;gap:20px;align-items:center;margin-bottom:20px;flex-wrap:wrap;
+                padding:14px 18px;background:var(--card);border-radius:10px;border:1px solid var(--border);">
+      <span style="font-weight:600;color:#a78bfa;">⚖️ Paramètres</span>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);">
+        Mise plate B :
+        <input id="cmp-flat" type="number" value="10" min="1" step="1"
+          style="width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);
+                 background:var(--bg);color:var(--text);font-size:13px;text-align:center;"
+          onchange="reloadComparison()"> $
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);">
+        Plafond Kelly D :
+        <input id="cmp-cap" type="number" value="5" min="1" step="0.5"
+          style="width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);
+                 background:var(--bg);color:var(--text);font-size:13px;text-align:center;"
+          onchange="reloadComparison()"> $
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);">
+        Bankroll F :
+        <input id="cmp-bankroll" type="number" value="100" min="10" step="10"
+          style="width:70px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);
+                 background:var(--bg);color:var(--text);font-size:13px;text-align:center;"
+          onchange="reloadComparison()"> $
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);">
+        % nuit F :
+        <input id="cmp-pct" type="number" value="10" min="1" max="50" step="1"
+          style="width:55px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);
+                 background:var(--bg);color:var(--text);font-size:13px;text-align:center;"
+          onchange="reloadComparison()"> %
+      </label>
+      <span style="font-size:11px;color:var(--text-dim)">Basé sur les snapshots sauvegardés</span>
+    </div>
+
+    <!-- Cartes résumé 6 systèmes -->
+    <div id="cmp-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px;"></div>
+
+    <!-- Graphique cumulatif -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;
+                padding:16px;margin-bottom:24px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text-dim);margin-bottom:12px;">Gain cumulatif par système ($)</div>
+      <div style="position:relative;height:260px;"><canvas id="cmp-chart"></canvas></div>
+    </div>
+
+    <!-- Tableau détaillé -->
+    <div id="cmp-table"></div>
+
+  </div>
+
+  <!-- ══ ONGLET V2 : Nouveaux Signaux ══════════════════════════════ -->
+  <div class="tab-panel" id="panel-v2">
+    <div style="padding:0 4px 24px">
+
+      <!-- Explication -->
+      <div style="background:linear-gradient(135deg,#0891b215,#0e749110);border:1px solid #0891b240;
+                  border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:20px">🧪</span>
+          <span style="font-weight:700;font-size:15px;color:#22d3ee">Système V2 — Signaux non capturés par le marché</span>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
+          Les stats publiques (ERA, W%, WHIP) sont déjà dans les cotes. Ce système cherche des edges structurels que le marché n'a pas encore capturés :<br>
+          <strong style="color:#22d3ee">Dogs 1.85–2.60</strong> contre favoris surcôtés par le public •
+          <strong style="color:#22d3ee">Repos bullpen</strong> (releveurs frais vs épuisés) •
+          <strong style="color:#22d3ee">Biais public</strong> (équipes populaires → fader) •
+          <strong style="color:#22d3ee">Splits L/R</strong> (avantage main lanceur)
+        </p>
+      </div>
+
+      <!-- Bouton analyser + budget + stats rapides -->
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-analyze-v2" onclick="analyzeV2()"
+          style="background:#0891b2;border-color:#0891b2">
+          🧪 Analyser V2
+        </button>
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text)">
+          <label for="v2-budget">Budget soir</label>
+          <input type="number" id="v2-budget" value="10" min="1" step="1"
+            style="width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:13px;text-align:center;"
+            title="Montant total distribué entre les picks V2 selon leur score composite">
+          <span style="color:var(--text-dim)">$</span>
+          <span style="font-size:10px;color:var(--text-dim)">(réparti par score)</span>
+        </div>
+        <div id="v2-global-stats" style="display:flex;gap:16px;flex-wrap:wrap"></div>
+        <span id="v2-timestamp" style="font-size:11px;color:var(--text-dim);margin-left:auto"></span>
+      </div>
+
+      <!-- État loading / vide -->
+      <div id="v2-loading" style="display:none;text-align:center;padding:40px;color:var(--text-dim)">
+        <div style="font-size:32px;margin-bottom:12px">⏳</div>
+        <div>Analyse en cours — bullpen, splits, biais public…</div>
+      </div>
+      <div id="v2-empty" style="display:none;text-align:center;padding:40px;color:var(--text-dim)">
+        <div style="font-size:32px;margin-bottom:12px">🔭</div>
+        <div>Aucun pick V2 aujourd'hui — pas d'edges structurels détectés.</div>
+        <div style="font-size:12px;margin-top:8px">Les filtres sont stricts (dogs 1.85–2.60, score ≥ 10).</div>
+      </div>
+
+      <!-- Stats historiques V2 (EN HAUT) -->
+      <div id="v2-stats-section" style="display:none;margin-bottom:28px">
+        <div style="font-weight:600;font-size:13px;color:var(--text-dim);margin-bottom:12px">
+          📊 Historique V2
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px" id="v2-stat-cards"></div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px">
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px" id="v2-chart-label">ROI cumulatif V2</div>
+          <div style="position:relative;height:200px"><canvas id="chart-v2-roi"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Picks du jour (EN BAS) -->
+      <div id="v2-picks-section" style="display:none">
+        <div style="font-weight:600;font-size:13px;color:#22d3ee;margin-bottom:12px;border-top:1px solid var(--border);padding-top:16px" id="v2-picks-count"></div>
+        <div id="v2-picks-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  MLB Analyzer — JS
+// ════════════════════════════════════════════════════════════════
+
+let _currentTab      = 'today';
+let _yesterdayLoaded = false;
+let _statsLoaded     = false;
+let _cmpLoaded       = false;
+let _cmpChart        = null;
+let _currentPicks    = [];
+let _oppsData        = [];   // toutes les opps — pour le tri
+let _combosData      = [];   // combos générés ce soir — pour le snapshot
+let _lowValueNight   = false; // flag soirée déconseillée — sauvegardé dans le snapshot
+let _sortCol         = null;
+let _sortDir         = 'desc';
+let _v2Loaded        = false;
+let _v2Chart         = null;
+
+// ── Onglets ──────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  _currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.stats-bar').forEach(s => s.style.display = 'none');
+
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+
+  if (tab === 'today') {
+    const bar = document.getElementById('stats-bar-today');
+    if (bar.querySelector('#stat-matches').textContent !== '—') bar.style.display = '';
+    stopLivePolling();
+  } else if (tab === 'yesterday') {
+    document.getElementById('stats-bar-yesterday').style.display = '';
+    if (!_yesterdayLoaded) loadYesterday();
+    stopLivePolling();
+  } else if (tab === 'stats') {
+    if (!_statsLoaded) loadStats();
+    stopLivePolling();
+  } else if (tab === 'live') {
+    loadLive();
+    startLivePolling();
+  } else if (tab === 'comparaison') {
+    if (!_cmpLoaded) { _cmpLoaded = true; loadComparison(); }
+    stopLivePolling();
+  } else if (tab === 'v2') {
+    if (!_v2Loaded) analyzeV2();
+    stopLivePolling();
+  }
+}
+
+// ── Onglet 1 : Prévisions du jour ────────────────────────────────
+
+function getMaxNightly() {
+  return parseFloat(document.getElementById('max-nightly').value) || 10;
+}
+
+function setTodayState(s) {
+  ['idle','loading','results','empty','error'].forEach(n => {
+    const el = document.getElementById('today-' + n);
+    if (el) el.style.display = (n === s) ? '' : 'none';
+  });
+}
+
+async function analyze() {
+  setTodayState('loading');
+  document.getElementById('stats-bar-today').style.display = 'none';
+  document.getElementById('kelly-banner').style.display = 'none';
+  document.getElementById('btn-analyze').disabled = true;
+
+  const msgs = ['Scraping des cotes Mise-O-Jeu…','Chargement des stats MLB…','Calcul des probabilités…','Application du Kelly Criterion…'];
+  let mi = 0;
+  const sub = document.getElementById('loading-sub');
+  const iv = setInterval(() => { sub.textContent = msgs[++mi % msgs.length]; }, 2500);
+
+  try {
+    const maxNightly = getMaxNightly();
+    const top = 25;
+    const modeSel = document.getElementById('mode-select');
+    const mode = modeSel ? modeSel.value : 'standard';
+    try { localStorage.setItem('mlb_mode', mode); } catch(e) {}
+    const url = `/api/analyze?kelly=0.25&top=${top}&max_nightly=${maxNightly}&mode=${mode}`;
+
+    // Polling : réessaye jusqu'à ce que le serveur réponde 200
+    let data = null;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const resp = await fetch(url);
+      if (resp.status === 202) {
+        // Analyse en cours — attendre 2s et réessayer
+        const pollMsgs = [
+          'Scraping des cotes Mise-O-Jeu… (~20s)',
+          'Chargement des stats MLB…',
+          'Calcul des probabilités…',
+          'Récupération des lanceurs partants…',
+          'Application du Kelly Criterion…',
+          'Analyse en cours…',
+        ];
+        sub.textContent = pollMsgs[Math.min(attempt, pollMsgs.length - 1)];
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        clearInterval(iv);
+        setTodayState('error');
+        document.getElementById('error-msg').textContent = err.error || 'Erreur inconnue';
+        return;
+      }
+      data = await resp.json();
+      break;
+    }
+
+    clearInterval(iv);
+    if (!data) {
+      setTodayState('error');
+      document.getElementById('error-msg').textContent = 'Délai dépassé — réessaie dans quelques secondes.';
+      return;
+    }
+    renderToday(data);
+  } catch(e) {
+    clearInterval(iv);
+    setTodayState('error');
+    document.getElementById('error-msg').textContent = e.message;
+  } finally {
+    document.getElementById('btn-analyze').disabled = false;
+  }
+}
+
+function _sortValue(opp, col) {
+  switch(col) {
+    case 'match':       return (opp.away_team + ' @ ' + opp.home_team).toLowerCase();
+    case 'bet_type':    return (opp.bet_type || '').toLowerCase();
+    case 'selection':   return (opp.selection_label || opp.selection || '').toLowerCase();
+    case 'odds':        return opp.odds || 0;
+    case 'house_margin':return opp.house_margin || 0;
+    case 'value_score': return opp.value_score || 0;
+    case 'kelly_bet':   return opp.kelly_bet || 0;
+    case 'retour':      return (opp.kelly_bet || 0) * (opp.odds || 1);
+    case 'recommendation': {
+      const r = (opp.recommendation || '').toLowerCase();
+      return r.includes('excellent') ? 3 : r.startsWith('bon') ? 2 : r.includes('viter') ? 0 : 1;
+    }
+    default: return 0;
+  }
+}
+
+function _renderOppsTable(opps) {
+  const tbody = document.getElementById('opps-tbody');
+  tbody.innerHTML = '';
+
+  opps.forEach((opp, i) => {
+    const isInfo = opp.is_info_only || false;
+    const rec = opp.recommendation || '';
+    let badgeClass = 'badge-neutre', badgeIcon = '★';
+    if (rec.includes('Excellent')) { badgeClass = 'badge-excellent'; badgeIcon = '★★★'; }
+    else if (rec.startsWith('Bon'))  { badgeClass = 'badge-bon';       badgeIcon = '★★'; }
+    else if (rec.includes('viter')) { badgeClass = 'badge-eviter';     badgeIcon = '×'; }
+    const odds = opp.odds || 2.0;
+    const oddsClass = odds <= 1.60 ? 'odds-low' : odds <= 2.20 ? 'odds-mid' : odds <= 3.50 ? 'odds-high' : 'odds-very';
+    const margin = opp.house_margin || 0;
+    const marginClass = margin < 5 ? 'margin-good' : margin > 8 ? 'margin-bad' : 'margin-ok';
+    const score = opp.value_score || 0;
+    const scoreColor = score >= 70 ? '#22c55e' : score >= 50 ? '#3fb950' : score >= 30 ? '#d29922' : '#8b949e';
+    const kb = opp.kelly_bet || 0;
+
+    // En mode info : afficher "📊 Analyse" à la place du montant Kelly
+    const kellyStr   = isInfo ? '📊 Analyse' : (kb > 0 ? '$' + (Number.isInteger(kb) ? kb : kb.toFixed(1)) : '—');
+    const kellyClass = isInfo ? 'kelly-none' : (kb <= 0 ? 'kelly-none' : kb >= 5 ? 'kelly-great' : kb >= 2 ? 'kelly-good' : 'kelly-small');
+    const retour     = isInfo ? '' : (kb > 0 ? '$' + (kb * odds).toFixed(2) : '—');
+    const profit     = isInfo ? '' : (kb > 0 ? '+$' + (kb * (odds - 1)).toFixed(2) + ' profit' : '');
+
+    const logosHtml  = mlbMatchLogosHtml(opp.away_team, opp.home_team);
+    const matchUrl   = opp.event_url ? `href="${opp.event_url}" target="_blank"` : '';
+    const pitcherHtml = opp.pitcher_info ? `<div class="pitcher">⚾ ${opp.pitcher_info}</div>` : '';
+    const w = opp.weather || {};
+    const weatherHtml = (() => {
+      if (!w || w.is_dome) return w.is_dome ? '<div class="pitcher" style="color:var(--text-dim)">🏟️ Toit fermé</div>' : '';
+      const adj = w.run_adjustment || 0;
+      const adjColor = adj >= 0.5 ? '#f59e0b' : adj <= -0.4 ? '#38bdf8' : 'var(--text-dim)';
+      const adjTxt = adj !== 0 ? ` <span style="color:${adjColor};font-weight:700">${adj >= 0 ? '+' : ''}${adj.toFixed(1)} runs</span>` : '';
+      const wind = w.wind_kmh > 8 ? ` 💨 ${w.wind_kmh}km/h ${w.wind_cardinal||''}` : '';
+      const rain = w.precip_prob >= 40 ? ` 🌧️ ${w.precip_prob}%` : '';
+      const temp = w.temp_c != null ? `🌡️ ${w.temp_c.toFixed(0)}°C` : '';
+      return `<div class="pitcher" style="color:var(--text-dim)">${temp}${wind}${rain}${adjTxt}</div>`;
+    })();
+    const tr = document.createElement('tr');
+    // En mode info : opacité réduite et fond légèrement différent
+    if (isInfo) tr.style.cssText = 'opacity:0.72;background:rgba(139,148,158,0.04)';
+    tr.innerHTML = `
+      <td class="rank">${i+1}</td>
+      <td class="match-cell">
+        <a ${matchUrl} style="color:inherit;text-decoration:none;">${logosHtml}</a>
+        <div class="meta" style="text-align:center;">${opp.date||''} ${opp.time||''} · ${opp.league||'MLB'}</div>
+        ${pitcherHtml}
+        ${weatherHtml}
+      </td>
+      <td style="font-size:12px;color:var(--text-dim)">${opp.bet_type||''}</td>
+      <td style="font-weight:600">${opp.selection_label||''}</td>
+      <td class="center"><span class="${oddsClass}">${odds.toFixed(2)}</span></td>
+      <td class="center"><span class="${marginClass}">${margin.toFixed(1)}%</span></td>
+      <td class="center">
+        <div class="score-wrap">
+          <div class="score-bar-bg"><div class="score-bar-fill" style="width:${score}%;background-color:${scoreColor}"></div></div>
+          <span class="score-num" style="color:${scoreColor}">${score.toFixed(0)}</span>
+        </div>
+      </td>
+      <td class="center"><span class="${kellyClass}" style="font-weight:700;font-size:${isInfo ? '12' : '14'}px;color:${isInfo ? 'var(--text-dim)' : ''}">${kellyStr}</span></td>
+      <td class="right"><div style="font-weight:600;color:var(--cyan)">${retour}</div><div style="font-size:11px;color:var(--mlb)">${profit}</div></td>
+      <td class="center"><span class="badge ${badgeClass}" style="${isInfo ? 'opacity:0.8' : ''}">${badgeIcon} ${rec.replace(' ***','').replace(' **','')}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderToday(data) {
+  const opps = data.opportunities || [];
+  const allPreds = data.all_predictions || [];
+  // Fusionner : d'abord les paris misés, puis les prédictions info-only
+  // Clé dédup : match + bet_type + selection (exclut les doublons exacts)
+  const oppKeys = new Set(opps.map(o =>
+    `${o.home_team}|${o.away_team}|${o.bet_type}|${o.selection_label}`
+  ));
+  const allOpps = [
+    ...opps,
+    ...allPreds.filter(p => {
+      const key = `${p.home_team}|${p.away_team}|${p.bet_type}|${p.selection_label}`;
+      return !oppKeys.has(key);
+    })
+  ];
+  _oppsData       = allOpps;
+  _combosData     = data.combos || [];
+  _lowValueNight  = data.low_value_night || false;
+  renderMLBComboProposals(_combosData);
+
+  // Mémoriser les picks avec mise pour le snapshot (inclure factor_scores pour calibration)
+  _currentPicks = opps.filter(o => (o.kelly_bet || 0) > 0).map(o => ({
+    key:            (o.home_team||'') + '|' + (o.bet_type||'') + '|' + (o.selection_label||''),
+    match:          o.home_team + ' vs ' + o.away_team,
+    home_team:      o.home_team,
+    away_team:      o.away_team,
+    selection:      o.selection_label || o.selection,
+    bet_type:       o.bet_type,
+    odds:           o.odds,
+    fair_prob:      o.fair_prob,
+    mise:           o.kelly_bet,
+    recommendation: o.recommendation,
+    factor_scores:  o.factor_scores || {},
+  }));
+  document.getElementById('btn-snapshot').style.display = _currentPicks.length > 0 ? '' : 'none';
+
+  // Stats bar
+  document.getElementById('stat-matches').textContent = data.total_matches ?? '—';
+  document.getElementById('stat-picks').textContent   = data.total_picks ?? '—';
+  document.getElementById('stat-picks-sub').textContent = `${data.n_excellent ?? 0} Excellent ★★★, ${data.n_bon ?? 0} Bon ★★`;
+  document.getElementById('badge-today').textContent  = opps.length;
+
+  // Bannière soirée peu conseillée
+  const lvBanner = document.getElementById('low-value-banner');
+  if (data.low_value_night) {
+    const conf = (data.kelly_confidence || 0).toFixed(1);
+    const reason = data.n_excellent === 0
+      ? 'Aucun pari Excellent ce soir — les filtres de qualité sont assouplis. Misez prudemment et réduisez vos mises.'
+      : `Avantage moyen faible (${conf}%) — soirée à risque élevé. Réduisez vos mises.`;
+    document.getElementById('low-value-msg').textContent = reason;
+    lvBanner.style.display = 'flex';
+  } else {
+    lvBanner.style.display = 'none';
+  }
+
+  // Kelly banner + entête budget
+  const budget = data.max_nightly || getMaxNightly();
+  document.getElementById('kb-max').textContent  = '$' + budget;
+  const thBudget = document.getElementById('th-budget');
+  if (thBudget) thBudget.textContent = budget;
+  document.getElementById('kb-total').textContent    = '$' + (data.total_kelly_wagered || 0).toFixed(0);
+  document.getElementById('kb-count').textContent    = opps.filter(o => (o.kelly_bet || 0) > 0).length;
+
+  if (!allOpps.length) { setTodayState('empty'); return; }
+  _renderOppsTable(allOpps);
+
+  // Activer le tri sur les entêtes
+  document.querySelectorAll('thead th[data-sort]').forEach(th => {
+    th.onclick = () => {
+      const col = th.dataset.sort;
+      if (_sortCol === col) {
+        _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        _sortCol = col;
+        _sortDir = ['house_margin'].includes(col) ? 'asc' : 'desc';
+      }
+      document.querySelectorAll('thead th[data-sort]').forEach(h => h.classList.remove('sorted-asc','sorted-desc'));
+      th.classList.add(_sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+      const sorted = [..._oppsData].sort((a, b) => {
+        const va = _sortValue(a, col), vb = _sortValue(b, col);
+        return _sortDir === 'asc' ? (va > vb ? 1 : va < vb ? -1 : 0)
+                                  : (va < vb ? 1 : va > vb ? -1 : 0);
+      });
+      _renderOppsTable(sorted);
+    };
+  });
+
+  const modeTag = data.mode === 'conservative' ? ' · 🛡 Conservateur' : '';
+  document.getElementById('opp-count').textContent = `${opps.length} paris + ${allOpps.length - opps.length} prédictions${modeTag}`;
+  document.getElementById('last-refresh').textContent =
+    'Actualisé à ' + (data.timestamp || new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}));
+
+  setTodayState('results');
+  document.getElementById('stats-bar-today').style.display = '';
+  document.getElementById('kelly-banner').style.display = '';
+}
+
+async function saveSnapshot() {
+  if (!_currentPicks.length) { showToast('Aucun pari à sauvegarder'); return; }
+  const btn = document.getElementById('btn-snapshot');
+  btn.disabled = true;
+  btn.textContent = '⏳ Sauvegarde…';
+  try {
+    const allOpps = _oppsData.map(o => ({
+      key:            (o.home_team||'') + '|' + (o.bet_type||'') + '|' + (o.selection_label||''),
+      match:          o.home_team + ' vs ' + o.away_team,
+      home_team:      o.home_team,
+      away_team:      o.away_team,
+      selection:      o.selection_label || o.selection,
+      bet_type:       o.bet_type,
+      odds:           o.odds,
+      fair_prob:      o.fair_prob,
+      mise:           o.kelly_bet || 0,
+      recommendation: o.recommendation,
+      factor_scores:  o.factor_scores || {},
+      weather:        o.weather || {},
+    }));
+    const resp = await fetch('/api/save-snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ picks: _currentPicks, all_opps: allOpps, combos: _combosData, low_value_night: _lowValueNight }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      btn.textContent = '✓ Sauvegardé';
+      btn.classList.add('saved');
+      showToast(`💾 ${data.saved} paris sauvegardés à ${data.time}`);
+    } else {
+      showToast('Erreur : ' + (data.error || 'inconnue'));
+      btn.textContent = '💾 Sauvegarder';
+    }
+  } catch(e) {
+    showToast('Erreur réseau');
+    btn.textContent = '💾 Sauvegarder';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doRefresh() {
+  await fetch('/api/refresh', { method: 'POST' });
+  showToast('🔄 Cache effacé — relancez l\'analyse');
+  setTodayState('idle');
+  document.getElementById('stats-bar-today').style.display = 'none';
+  document.getElementById('kelly-banner').style.display = 'none';
+  document.getElementById('low-value-banner').style.display = 'none';
+}
+
+// ── Onglet 2 : Résultats d'hier ──────────────────────────────────
+
+async function loadYesterday() {
+  _yesterdayLoaded = true;
+
+  show('yesterday-loading');
+  hide('yesterday-content');
+  hide('yesterday-empty');
+  document.getElementById('stats-bar-yesterday').style.display = '';
+
+  try {
+    const resp = await fetch('/api/yesterday');
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      const msg = document.getElementById('yesterday-empty-msg');
+      if (msg) msg.textContent = data.error === 'snapshot_today'
+        ? 'Le snapshot d\'aujourd\'hui sera utilisé pour les résultats de demain.'
+        : (data.error || 'Aucun snapshot disponible — sauvegarde le tableau avec 💾');
+      show('yesterday-empty'); hide('yesterday-loading'); return;
+    }
+
+    renderYesterday(data);
+  } catch(e) {
+    show('yesterday-empty');
+    hide('yesterday-loading');
+  }
+}
+
+function renderYesterday(data) {
+  const records = data.picks || data.records || [];
+
+  // Stats bar — ne compter que les paris misés pour le badge et les stats financières
+  const betCount0  = (data.picks || []).filter(r => r.is_bet).length;
+  const predCount0 = (data.picks || []).filter(r => !r.is_bet).length;
+  document.getElementById('ystat-total').textContent   = betCount0 + (predCount0 ? ' (+' + predCount0 + ')' : '');
+  document.getElementById('ystat-date').textContent    = data.date ? formatDate(data.date) : '—';
+  document.getElementById('ystat-wins').textContent    = data.wins ?? '—';
+  document.getElementById('ystat-losses-sub').textContent = `${data.losses ?? '—'} défaite(s)`;
+  document.getElementById('ystat-pending').textContent = data.pending ?? '—';
+  document.getElementById('badge-yesterday').textContent = betCount0 + (predCount0 ? '+' + predCount0 : '');
+
+  const roi = data.roi ?? 0;
+  const roiEl = document.getElementById('ystat-roi');
+  roiEl.textContent = (roi >= 0 ? '+$' : '-$') + Math.abs(roi).toFixed(2);
+  roiEl.className   = 'value ' + (roi >= 0 ? 'profit-pos' : 'profit-neg');
+
+  // Cartes récap
+  document.getElementById('rc-wins').textContent   = data.wins ?? '—';
+  document.getElementById('rc-losses').textContent = data.losses ?? '—';
+  document.getElementById('rc-pushes').textContent = data.pushes ?? '—';
+  const rcRoi = document.getElementById('rc-roi');
+  rcRoi.textContent = (roi >= 0 ? '+$' : '-$') + Math.abs(roi).toFixed(2);
+  rcRoi.className   = 'rc-val ' + (roi >= 0 ? 'profit-pos' : 'profit-neg');
+
+  document.getElementById('yesterday-title').textContent = `Résultats du ${formatDate(data.date)}`;
+
+  if (!records.length) {
+    hide('yesterday-loading');
+    show('yesterday-empty');
+    return;
+  }
+
+  const bets  = records.filter(r => r.is_bet);
+  const preds = records.filter(r => !r.is_bet);
+  const betCount  = bets.length;
+  const predCount = preds.length;
+  document.getElementById('yesterday-count').textContent =
+    betCount + ' mis' + (betCount > 1 ? 'es' : 'e') +
+    (predCount ? ' · ' + predCount + ' prédiction' + (predCount > 1 ? 's' : '') : '');
+
+  const tbody = document.getElementById('yesterday-tbody');
+  tbody.innerHTML = '';
+
+  function makeRow(r, i, isBet) {
+    const outcome = r.outcome;
+    let outTxt, outClass, profitTxt, profitClass;
+    const profit = r.profit ?? null;
+    if (outcome === 'win') {
+      outTxt = '&#10003; Victoire'; outClass = 'outcome-win';
+      profitTxt = isBet && profit != null ? '+$' + profit.toFixed(2) : '&#10003;';
+      profitClass = 'profit-pos';
+    } else if (outcome === 'loss') {
+      outTxt = '&#10005; Défaite'; outClass = 'outcome-loss';
+      profitTxt = isBet && profit != null ? '-$' + Math.abs(profit).toFixed(2) : '&#10005;';
+      profitClass = 'profit-neg';
+    } else if (outcome === 'push') {
+      outTxt = '&#8596; Nul'; outClass = 'outcome-push';
+      profitTxt = isBet ? '$0.00' : '&#8596;'; profitClass = '';
+    } else {
+      outTxt = '&#8987; En attente'; outClass = 'outcome-pending';
+      profitTxt = '—'; profitClass = '';
+    }
+
+    const rec = r.recommendation || '';
+    let badgeClass = 'badge-neutre';
+    if (rec.includes('Excellent')) badgeClass = 'badge-excellent';
+    else if (rec.startsWith('Bon')) badgeClass = 'badge-bon';
+
+    const odds = r.odds || 2.0;
+    const oddsClass = odds <= 1.60 ? 'odds-low' : odds <= 2.20 ? 'odds-mid' : odds <= 3.50 ? 'odds-high' : 'odds-very';
+    const fp = ((r.fair_prob || 0) * 100).toFixed(1);
+    const miseStr = isBet ? '$' + (r.mise || 0).toFixed(2) : '<span style="color:var(--text-dim);font-size:11px">—</span>';
+    const rowStyle = isBet ? '' : 'opacity:0.72;';
+
+    const tr = document.createElement('tr');
+    tr.style.cssText = rowStyle;
+    tr.innerHTML = `
+      <td class="rank">${i + 1}</td>
+      <td class="match-cell">
+        ${mlbMatchLogosHtml(r.away_team, r.home_team)}
+        <div class="meta" style="text-align:center;">${r.date||''} ${r.time||''} · MLB</div>
+      </td>
+      <td style="font-size:12px;color:var(--text-dim)">${r.bet_type||''}</td>
+      <td style="font-weight:600">${r.selection||''}</td>
+      <td class="center"><span class="${oddsClass}">${odds.toFixed(2)}</span></td>
+      <td class="center" style="font-weight:600">${miseStr}</td>
+      <td class="center" style="color:var(--text-dim)">${fp}%</td>
+      <td class="center"><span class="badge ${badgeClass}">${rec.replace(' ***','').replace(' **','')}</span></td>
+      <td class="center"><span class="${outClass}">${outTxt}</span></td>
+      <td class="right"><span class="${profitClass}">${profitTxt}</span></td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // Paris misés en premier (avec séparateur si des prédictions suivent)
+  bets.forEach((r, i) => makeRow(r, i + 1, true));
+
+  if (preds.length) {
+    const sep = document.createElement('tr');
+    sep.innerHTML = `<td colspan="10" style="padding:6px 10px;background:var(--bg3);font-size:11px;color:var(--text-dim);font-style:italic;border-top:2px solid var(--border)">
+      Prédictions analysées (non misées) — ${preds.length} entrée${preds.length > 1 ? 's' : ''}
+    </td>`;
+    tbody.appendChild(sep);
+    preds.forEach((r, i) => makeRow(r, bets.length + i + 1, false));
+  }
+
+  hide('yesterday-loading');
+  show('yesterday-content');
+
+  renderMLBComboResultCards(data.combos || []);
+
+  // Charger le graphique via /api/stats
+  loadGainsChart();
+}
+
+// ── Graphique gains par jour ──────────────────────────────────────
+
+let _gainsChart = null;
+let _gainsData  = null;
+let _chartMode  = 'bar';  // 'bar' | 'line'
+
+async function loadGainsChart() {
+  try {
+    const res  = await fetch('/api/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+    _gainsData = data.by_date || [];
+    if (_gainsData.length === 0) return;
+    show('gains-chart-wrap');
+    renderGainsChart(_gainsData, _chartMode);
+  } catch(e) {}
+}
+
+function setChartMode(mode) {
+  _chartMode = mode;
+  document.getElementById('chart-mode-bar').style.background  = mode === 'bar'  ? 'var(--accent)' : 'var(--card)';
+  document.getElementById('chart-mode-bar').style.color       = mode === 'bar'  ? '#000' : 'var(--text)';
+  document.getElementById('chart-mode-line').style.background = mode === 'line' ? 'var(--accent)' : 'var(--card)';
+  document.getElementById('chart-mode-line').style.color      = mode === 'line' ? '#000' : 'var(--text)';
+  if (_gainsData) renderGainsChart(_gainsData, mode);
+}
+
+function renderGainsChart(byDate, mode) {
+  const labels = byDate.map(d => {
+    const dt = new Date(d.date + 'T12:00:00');
+    return dt.toLocaleDateString('fr-CA', {month:'short', day:'numeric'});
+  });
+
+  // Calcul du cumulatif (utile dans les deux modes)
+  const cumulData = [];
+  let running = 0;
+  byDate.forEach(d => { running += d.roi; cumulData.push(+running.toFixed(2)); });
+
+  // Couleurs des barres : soirée déconseillée = teinte orange/ambrée, normale = vert/rouge
+  const barBg = byDate.map(d => {
+    if (d.low_value) return d.roi >= 0 ? 'rgba(251,146,60,0.65)' : 'rgba(251,146,60,0.40)';
+    return d.roi >= 0 ? 'rgba(34,197,94,0.70)' : 'rgba(239,68,68,0.70)';
+  });
+  const barBorder = byDate.map(d => {
+    if (d.low_value) return '#fb923c';
+    return d.roi >= 0 ? '#22c55e' : '#ef4444';
+  });
+
+  let datasets;
+  if (mode === 'bar') {
+    // Barres journalières colorées + ligne cumulative superposée
+    datasets = [
+      {
+        type: 'bar',
+        label: 'Gain / Perte ($)',
+        data: byDate.map(d => d.roi),
+        backgroundColor: barBg,
+        borderColor:     barBorder,
+        borderWidth: 1,
+        borderRadius: 4,
+        yAxisID: 'y',
+      },
+      {
+        type: 'line',
+        label: 'Cumulatif ($)',
+        data: cumulData,
+        borderColor: '#facc15',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        borderDash: [],
+        tension: 0.3,
+        pointRadius: byDate.length <= 14 ? 4 : 2,
+        pointBackgroundColor: cumulData.map(v => v >= 0 ? '#facc15' : '#f97316'),
+        pointBorderColor: '#111',
+        pointBorderWidth: 1,
+        yAxisID: 'y',
+        order: 0,
+      },
+    ];
+  } else {
+    // Ligne cumulative seule — points orange si soirée déconseillée
+    datasets = [{
+      label: 'Gain cumulatif ($)',
+      data: cumulData,
+      borderColor: '#22c55e',
+      backgroundColor: 'rgba(34,197,94,0.10)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: byDate.length <= 10 ? 5 : 3,
+      pointBackgroundColor: byDate.map((d, i) => d.low_value ? '#fb923c' : (cumulData[i] >= 0 ? '#22c55e' : '#ef4444')),
+      pointBorderColor: byDate.map(d => d.low_value ? '#fff' : '#111'),
+      pointBorderWidth: byDate.map(d => d.low_value ? 2 : 1),
+    }];
+  }
+
+  if (_gainsChart) _gainsChart.destroy();
+  _gainsChart = new Chart(document.getElementById('gains-chart'), {
+    type: mode === 'bar' ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: mode === 'bar',
+          labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 16 },
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            title: items => {
+              const d = byDate[items[0].dataIndex];
+              return d.low_value ? `${items[0].label}  ⚠️ Soirée déconseillée` : items[0].label;
+            },
+            label: ctx => {
+              const d = byDate[ctx.dataIndex];
+              const sign = ctx.parsed.y >= 0 ? '+' : '';
+              if (ctx.dataset.label === 'Cumulatif ($)' || ctx.dataset.label === 'Gain cumulatif ($)') {
+                return `Cumulatif : ${sign}$${ctx.parsed.y.toFixed(2)}`;
+              }
+              return `Journée : ${sign}$${ctx.parsed.y.toFixed(2)} (${d.wins}V ${d.losses}D)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#9ca3af', font: { size: 11 } },
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: {
+            color: '#9ca3af',
+            font: { size: 11 },
+            callback: v => (v >= 0 ? '+' : '') + '$' + v.toFixed(0),
+          },
+        }
+      }
+    }
+  });
+}
+
+// ── Logos MLB ────────────────────────────────────────────────────
+
+const _MLB_ABBREV_MAP = {
+  'orioles': 'BAL', 'baltimore': 'BAL',
+  'red sox': 'BOS', 'boston': 'BOS',
+  'cubs': 'CHC', 'white sox': 'CWS',
+  'reds': 'CIN', 'cincinnati': 'CIN',
+  'guardians': 'CLE', 'cleveland': 'CLE',
+  'rockies': 'COL', 'colorado': 'COL',
+  'tigers': 'DET', 'detroit': 'DET',
+  'astros': 'HOU', 'houston': 'HOU',
+  'royals': 'KC', 'kansas city': 'KC',
+  'angels': 'LAA',
+  'dodgers': 'LAD',
+  'marlins': 'MIA', 'miami': 'MIA',
+  'brewers': 'MIL', 'milwaukee': 'MIL',
+  'twins': 'MIN', 'minnesota': 'MIN',
+  'mets': 'NYM',
+  'yankees': 'NYY',
+  'athletics': 'OAK', 'oakland': 'OAK',
+  'phillies': 'PHI', 'philadelphie': 'PHI', 'philadelphia': 'PHI',
+  'pirates': 'PIT', 'pittsburgh': 'PIT',
+  'cardinals': 'STL', 'saint-louis': 'STL', 'st. louis': 'STL', 'st louis': 'STL',
+  'padres': 'SD', 'san diego': 'SD',
+  'giants': 'SF', 'san francisco': 'SF',
+  'mariners': 'SEA', 'seattle': 'SEA',
+  'rays': 'TB', 'tampa bay': 'TB',
+  'rangers': 'TEX', 'texas': 'TEX',
+  'blue jays': 'TOR', 'toronto': 'TOR',
+  'nationals': 'WSH', 'washington': 'WSH',
+  'diamondbacks': 'ARI', 'arizona': 'ARI',
+  'braves': 'ATL', 'atlanta': 'ATL',
+  'los angeles': 'LAD',
+  'chicago': 'CHC',
+  'new york': 'NYY',
+};
+
+function mlbTeamAbbrev(name) {
+  if (!name) return null;
+  const s = name.toLowerCase().trim();
+  // Chercher d'abord dans la parenthèse ex: "Boston (Red Sox)"
+  const m = s.match(/\(([^)]+)\)/);
+  if (m) {
+    const inner = m[1];
+    for (const [k, v] of Object.entries(_MLB_ABBREV_MAP)) {
+      if (inner.includes(k)) return v;
+    }
+  }
+  for (const [k, v] of Object.entries(_MLB_ABBREV_MAP)) {
+    if (s.includes(k)) return v;
+  }
+  return null;
+}
+
+function mlbLogoImg(name, size) {
+  const abbrev = mlbTeamAbbrev(name);
+  if (!abbrev) return `<span style="font-size:11px;color:var(--text-dim)">${name||'?'}</span>`;
+  const sz = size || 50;
+  return `<img src="https://a.espncdn.com/i/teamlogos/mlb/500/${abbrev}.png" style="width:${sz}px;height:${sz}px;object-fit:contain;vertical-align:middle;flex-shrink:0;" alt="${abbrev}" onerror="this.style.display='none'" loading="lazy">`;
+}
+
+function mlbMatchLogosHtml(awayTeam, homeTeam) {
+  const awayLogo = mlbLogoImg(awayTeam, 60);
+  const homeLogo = mlbLogoImg(homeTeam, 60);
+  return `<div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:70px;">
+      ${awayLogo}
+      <span style="font-size:10px;color:var(--text-dim);margin-top:3px;text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${awayTeam||'?'}</span>
+    </div>
+    <span style="font-size:13px;font-weight:700;color:var(--text-dim);margin:0 6px;">VS</span>
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:70px;">
+      ${homeLogo}
+      <span style="font-size:10px;color:var(--text-dim);margin-top:3px;text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${homeTeam||'?'}</span>
+    </div>
+  </div>`;
+}
+
+// ── Utilitaires ──────────────────────────────────────────────────
+
+function show(id) { const el = document.getElementById(id); if (el) el.style.display = ''; }
+function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  const months = ['jan','fév','mar','avr','mai','juin','jul','aoû','sep','oct','nov','déc'];
+  return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+}
+
+function showToast(msg, ms = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+
+// ── Onglet 3 : Statistiques ──────────────────────────────────────
+
+function show(id) { const e = document.getElementById(id); if(e) e.style.display = ''; }
+function hide(id) { const e = document.getElementById(id); if(e) e.style.display = 'none'; }
+
+function _roiCell(roi) {
+  const cls = roi > 0 ? 'profit-pos' : roi < 0 ? 'profit-neg' : '';
+  return `<span class="${cls}">${roi >= 0 ? '+' : ''}$${Math.abs(roi).toFixed(2)}</span>`;
+}
+function _winRateCell(wr) {
+  if (wr == null) return '—';
+  const cls = wr >= 55 ? 'calib-good' : wr < 45 ? 'calib-bad' : '';
+  return `<span class="${cls}">${wr}%</span>`;
+}
+
+let _winrateChart = null;
+function renderWinrateProgression(byDate) {
+  if (!byDate || byDate.length === 0) return;
+
+  const labels = byDate.map(d => {
+    const [y, m, day] = d.date.split('-');
+    return `${day}/${m}`;
+  });
+
+  const winRates = byDate.map(d => d.win_rate !== null ? d.win_rate : null);
+  const colors = byDate.map(d => d.low_value ? 'rgba(251,146,60,0.65)' : 'rgba(34,197,94,0.70)');
+
+  // Calculer la moyenne générale des win rates (pour la ligne médiane)
+  const validWinRates = winRates.filter(w => w !== null);
+  const avgWinRate = validWinRates.length > 0
+    ? validWinRates.reduce((a, b) => a + b, 0) / validWinRates.length
+    : 50;
+  const medianLine = labels.map(() => avgWinRate);
+
+  if (_winrateChart) _winrateChart.destroy();
+  _winrateChart = new Chart(document.getElementById('chart-winrate-progression'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '% de victoire',
+          data: winRates,
+          borderColor: '#79c0ff',
+          backgroundColor: 'rgba(121,192,255,0.08)',
+          pointBackgroundColor: colors,
+          pointBorderColor: colors,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          tension: 0.3,
+          borderWidth: 2.5,
+          fill: true,
+        },
+        {
+          label: `Moyenne (${avgWinRate.toFixed(1)}%)`,
+          data: medianLine,
+          borderColor: 'rgba(251,191,36,0.6)',
+          borderDash: [8, 4],
+          pointRadius: 0,
+          borderWidth: 2,
+          tension: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#9ca3af', font: { size: 12 }, boxWidth: 16 } },
+        tooltip: {
+          callbacks: {
+            title: ctx => {
+              const d = byDate[ctx[0].dataIndex];
+              return `${d.date}`;
+            },
+            label: ctx => {
+              const d = byDate[ctx.dataIndex];
+              const lowVal = d.low_value ? ' ⚠️ Soirée peu conseillée' : '';
+              return `Win rate: ${d.win_rate !== null ? d.win_rate + '%' : 'N/A'} (${d.wins}V/${d.losses}D)${lowVal}`;
+            },
+          },
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          borderColor: '#79c0ff',
+          borderWidth: 1,
+          padding: 10,
+          titleFont: { size: 12 },
+          bodyFont: { size: 11 },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#9ca3af', font: { size: 11 } },
+        },
+        y: {
+          min: 0,
+          max: 100,
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: { color: '#9ca3af', font: { size: 11 }, callback: v => v + '%' },
+        },
+      },
+    },
+  });
+}
+
+let _calibChart = null;
+function renderCalibrationCurve(calibration) {
+  const labels    = calibration.map(d => d.label);
+  const predicted = calibration.map(d => d.predicted);
+  const actual    = calibration.map(d => d.actual);
+  const counts    = calibration.map(d => d.count);
+
+  const pointColors = actual.map((a, i) =>
+    a >= predicted[i] - 2 ? 'rgba(74,222,128,0.9)' : 'rgba(239,68,68,0.9)'
+  );
+  const pointRadii = counts.map(c => Math.min(10, 4 + Math.sqrt(c)));
+
+  if (_calibChart) _calibChart.destroy();
+  _calibChart = new Chart(document.getElementById('chart-calibration-curve'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Taux réel (%)',
+          data: actual,
+          borderColor: '#60a5fa',
+          backgroundColor: 'transparent',
+          pointBackgroundColor: pointColors,
+          pointRadius: pointRadii,
+          pointHoverRadius: pointRadii.map(r => r + 2),
+          tension: 0.3,
+          borderWidth: 2,
+        },
+        {
+          label: 'Idéal (diagonale)',
+          data: predicted,
+          borderColor: 'rgba(255,255,255,0.35)',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          borderWidth: 1.5,
+          tension: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 16 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              if (ctx.datasetIndex === 1) return null;
+              const d = calibration[ctx.dataIndex];
+              return [
+                `Réel : ${d.actual}%`,
+                `Prédit : ${d.predicted}%`,
+                `(${d.count} paris)`,
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 11 } } },
+        y: {
+          min: 30, max: 100,
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: { color: '#9ca3af', font: { size: 11 }, callback: v => v + '%' },
+        },
+      },
+    },
+  });
+
+  // Modes comparison chart
+  let _modesChart = null;
+
+function renderModesCumulChart(byModeDaily) {
+  if (_modesChart) _modesChart.destroy();
+
+  const stdDaily = byModeDaily.standard || [];
+  const consDaily = byModeDaily.conservative || [];
+
+  const allDates = [
+    ...stdDaily.map(d => d.date),
+    ...consDaily.map(d => d.date)
+  ];
+  const uniqueDates = [...new Set(allDates)].sort();
+
+  const stdWR = stdDaily.length ? stdDaily.map(d => d.cumul_wr) : [];
+  const consWR = consDaily.length ? consDaily.map(d => d.cumul_wr) : [];
+
+  // Align dates
+  const stdByDate = Object.fromEntries(stdDaily.map(d => [d.date, d.cumul_wr]));
+  const consByDate = Object.fromEntries(consDaily.map(d => [d.date, d.cumul_wr]));
+
+  const labels = uniqueDates.map(d => d.substring(5)); // MM-DD
+  const stdData = uniqueDates.map(d => stdByDate[d] ?? null);
+  const consData = uniqueDates.map(d => consByDate[d] ?? null);
+
+  _modesChart = new Chart(document.getElementById('chart-modes-cumul'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Standard',
+          data: stdData,
+          borderColor: '#3fb950',
+          backgroundColor: 'rgba(63,185,80,0.05)',
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#3fb950',
+          pointBorderColor: 'rgba(255,255,255,0.3)',
+          pointBorderWidth: 1,
+        },
+        {
+          label: 'Conservateur',
+          data: consData,
+          borderColor: '#fb923c',
+          backgroundColor: 'rgba(251,146,60,0.05)',
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#fb923c',
+          pointBorderColor: 'rgba(255,255,255,0.3)',
+          pointBorderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 16 }, align: 'top' },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              return (ctx.dataset.label || '') + ' : ' + (v ?? '—') + '%';
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 } } },
+        y: {
+          min: 30,
+          max: 70,
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: { color: '#9ca3af', font: { size: 10 }, callback: v => v + '%' },
+        },
+      },
+    },
+  });
+}
+
+  // Insight automatique
+  const insight = document.getElementById('calibration-curve-insight');
+  const overEst  = calibration.filter(d => d.actual < d.predicted - 5);
+  const underEst = calibration.filter(d => d.actual > d.predicted + 5);
+  let insightHtml = '';
+  if (overEst.length > 1)
+    insightHtml = '<span style="color:#f87171">&#9888; Sur-estimation : le modèle prédit trop haut dans ' + overEst.map(d => d.label).join(', ') + '.</span>';
+  else if (underEst.length > 1)
+    insightHtml = '<span style="color:#4ade80">&#10003; Sous-estimation : le modèle est conservateur dans ' + underEst.map(d => d.label).join(', ') + '.</span>';
+  else
+    insightHtml = '<span style="color:#4ade80">&#10003; Calibration correcte — les probabilités prédites correspondent bien aux résultats réels.</span>';
+
+  insight.innerHTML = insightHtml + ' <span id="stat-weight-adj-msg" style="margin-left:10px;color:#94a3b8;font-style:italic">Ajustement stat_weight en cours...</span>';
+
+  // Auto-ajustement silencieux de stat_vs_math
+  fetch('/api/auto_calibrate_stat_weight')
+    .then(r => r.json())
+    .then(adj => {
+      const msg = document.getElementById('stat-weight-adj-msg');
+      if (!msg) return;
+      if (!adj.ok) {
+        msg.textContent = '(' + (adj.reason || 'Données insuffisantes') + ')';
+        return;
+      }
+      if (adj.changed) {
+        const dir = adj.bias_pct < 0 ? 'sur-estimation' : 'sous-estimation';
+        msg.innerHTML = '<span style="color:#facc15">&#9889; stat_weight auto-ajuste : ' +
+          adj.old + ' → <strong>' + adj.new + '</strong>' +
+          ' (biais ' + dir + ' ' + Math.abs(adj.bias_pct).toFixed(1) + '%, ' + adj.n + ' picks)</span>';
+      } else {
+        const biasTxt = Math.abs(adj.bias_pct || 0) < 1
+          ? 'modèle bien calibré'
+          : 'biais ' + Math.abs(adj.bias_pct).toFixed(1) + '%';
+        msg.innerHTML = '<span style="color:#4ade80">&#10003; stat_weight = ' + (adj.current || adj.new) + ' (' + biasTxt + ')</span>';
+      }
+    })
+    .catch(() => {
+      const msg = document.getElementById('stat-weight-adj-msg');
+      if (msg) msg.textContent = '';
+    });
+}
+
+async function loadStats() {
+  _statsLoaded = true;
+  show('stats-loading');
+  hide('stats-content');
+  hide('stats-empty');
+  hide('stats-weights-panel');
+  try {
+    const [statsResp, weightsResp, comboHistResp] = await Promise.all([
+      fetch('/api/stats'),
+      fetch('/api/weights'),
+      fetch('/api/mlb-combo-history'),
+    ]);
+    const weightsData = weightsResp.ok ? await weightsResp.json() : null;
+    if (weightsData) { renderWeights(weightsData); show('stats-weights-panel'); }
+    hide('stats-loading');
+    if (!statsResp.ok) { show('stats-empty'); return; }
+    const data = await statsResp.json();
+    renderStats(data, weightsData);
+    if (data.by_date && data.by_date.length) {
+      renderWinrateProgression(data.by_date);
+      renderGainsChart(data.by_date, 'line');  // Afficher aussi le graphique gains cumulatifs
+    }
+    if (data.calibration && data.calibration.length) renderCalibrationCurve(data.calibration);
+    // Charger aussi le graphique de comparaison des systèmes
+    await loadGainJourChart();
+    if (comboHistResp.ok) {
+      const comboData = await comboHistResp.json();
+      renderMLBComboHistory(comboData);
+    }
+  } catch(e) {
+    hide('stats-loading');
+    show('stats-empty');
+  }
+}
+
+const _FACTOR_LABELS = {
+  win_pct:       { fr: 'Win % saison',          desc: '% victoires sur la saison complète' },
+  home_away:     { fr: 'Record dom./route',      desc: 'Bilan dom./visiteur selon le rôle' },
+  recent_form:   { fr: 'Forme récente (L10)',    desc: '% victoires sur les 10 derniers matchs' },
+  runs_per_game: { fr: 'Runs offensifs/match',   desc: 'Moyenne de points marqués par match' },
+  era:           { fr: 'ERA équipe',             desc: 'Moyenne de points mérités accordés (équipe)' },
+  ops:           { fr: 'OPS offensif',           desc: 'On-base + Slugging percentage' },
+  whip:          { fr: 'WHIP équipe',            desc: 'Walks + Hits per Inning Pitched' },
+  starter_era:   { fr: 'ERA lanceur partant',    desc: "ERA individuelle du partant prévu aujourd'hui" },
+  run_diff:      { fr: 'Différentiel de points', desc: 'Points marqués − concédés sur la saison' },
+};
+
+function renderWeights(weightsData) {
+  if (!weightsData) return;
+  const w = weightsData.weights || {};
+  const d = weightsData.defaults || {};
+
+  // Mettre à jour stat_vs_math badge
+  if (weightsData.stat_vs_math != null) {
+    const sv = weightsData.stat_vs_math;
+    const valEl = document.getElementById('stat-vs-math-val');
+    const barEl = document.getElementById('stat-vs-math-bar');
+    if (valEl) valEl.textContent = sv.toFixed(3);
+    if (barEl) barEl.style.width = (sv * 100).toFixed(0) + '%';
+  }
+
+  const tbody = document.getElementById('stats-weights-tbody');
+  const sorted = Object.entries(w).sort((a, b) => b[1] - a[1]);
+  tbody.innerHTML = sorted.map(([k, v]) => {
+    const lbl  = _FACTOR_LABELS[k] || { fr: k, desc: '' };
+    const def  = d[k] ?? '—';
+    const pct  = (v * 100).toFixed(1) + '%';
+    const defPct = typeof def === 'number' ? (def * 100).toFixed(1) + '%' : '—';
+    const diff = typeof def === 'number' ? v - def : 0;
+    const diffStr = diff !== 0 ? `<span style="font-size:10px;color:${diff > 0 ? 'var(--win)' : 'var(--red)'}">${diff > 0 ? '+' : ''}${(diff*100).toFixed(1)}%</span>` : '';
+    const barWidth = Math.round(v * 100 * 5);  // scale 0–100% → 0–500px → clamped
+    return `<tr>
+      <td style="font-weight:600">${lbl.fr}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${lbl.desc}</td>
+      <td style="text-align:right">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+          <div style="width:80px;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div style="width:${Math.min(100, barWidth)}%;height:100%;background:var(--mlb);border-radius:3px"></div>
+          </div>
+          <span style="font-weight:700;color:var(--mlb);min-width:40px;text-align:right">${pct}</span>
+          ${diffStr}
+        </div>
+      </td>
+      <td style="text-align:right;color:var(--text-dim)">${defPct}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function calibrate() {
+  const btn = document.getElementById('btn-calibrate');
+  const res = document.getElementById('calibrate-result');
+  btn.disabled = true;
+  btn.textContent = '⏳ Calibration…';
+  res.style.display = 'none';
+  try {
+    const resp = await fetch('/api/calibrate', { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok) {
+      res.innerHTML = `<div style="color:var(--red);font-size:12px">⚠️ ${data.error}</div>`;
+      res.style.display = '';
+      return;
+    }
+    // Mettre à jour l'affichage des poids (inclure stat_vs_math si ajusté)
+    const newSvMath = data.stat_weight_adj?.new ?? data.stat_weight_adj?.current ?? null;
+    renderWeights({ weights: data.new_weights, defaults: data.new_weights, stat_vs_math: newSvMath });
+    // Afficher un résumé
+    const top = Object.entries(data.factor_stats || {})
+      .filter(([, v]) => !v.insufficient_data && v.predictive_power != null)
+      .sort((a, b) => b[1].predictive_power - a[1].predictive_power)
+      .slice(0, 3)
+      .map(([k, v]) => {
+        const lbl = _FACTOR_LABELS[k]?.fr || k;
+        return `<b>${lbl}</b> (Δ${v.delta > 0 ? '+' : ''}${v.delta}%)`;
+      }).join(', ');
+    const adj = data.stat_weight_adj || {};
+    let adjMsg = '';
+    if (adj.ok && adj.changed) {
+      adjMsg = `<br><span style="color:#facc15">&#9889; stat_weight ajuste : ${adj.old} &#8594; <b>${adj.new}</b> (biais ${adj.bias_pct > 0 ? '+' : ''}${adj.bias_pct}%)</span>`;
+    } else if (adj.ok) {
+      adjMsg = `<br><span style="color:#4ade80">&#10003; stat_weight = ${adj.current || adj.new} (calibration OK)</span>`;
+    }
+    res.innerHTML = `<div style="color:var(--win);font-size:12px">
+      &#10003; Calibration r&eacute;ussie &mdash; ${data.picks_analyzed} paris analys&eacute;s.<br>
+      ${top ? `Indicateurs les plus pr&eacute;dictifs : ${top}` : ''}${adjMsg}
+    </div>`;
+    res.style.display = '';
+    showToast(`Poids recalibres sur ${data.picks_analyzed} paris`);
+    // Invalider le cache analyse pour recalculer avec les nouveaux poids
+    await fetch('/api/refresh', { method: 'POST' });
+  } catch(e) {
+    res.innerHTML = `<div style="color:var(--red);font-size:12px">Erreur : ${e.message}</div>`;
+    res.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔬 Recalibrer les poids';
+  }
+}
+
+// ── Combos MLB — fonctions d'affichage ───────────────────────────
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMLBComboProposals(combos) {
+  const block = document.getElementById('mlb-combo-block');
+  const cards = document.getElementById('mlb-combo-cards');
+  if (!block || !cards) return;
+  if (!combos || !combos.length) { block.style.display = 'none'; return; }
+  block.style.display = '';
+  const medals = ['🥇','🥈','🥉'];
+  cards.innerHTML = combos.map((c, i) => {
+    const picksHtml = (c.picks || []).map(p => {
+      const bt  = (p.bet_type  || '').length > 42 ? p.bet_type.slice(0,40)+'…' : (p.bet_type  || '');
+      const sel = p.selection || '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;
+                          padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim)">${escHtml(bt)}</div>
+          <div style="font-size:13px;font-weight:600">${escHtml(sel)}</div>
+        </div>
+        <span style="font-size:13px;font-weight:700;color:#38bdf8;margin-left:10px;white-space:nowrap">×${(p.odds||0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    return `<div style="flex:1;min-width:220px;max-width:300px;
+                        background:linear-gradient(135deg,rgba(245,158,11,.07),rgba(245,158,11,.03));
+                        border:1px solid rgba(245,158,11,.25);border-left:4px solid #f59e0b;
+                        border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-size:11px;color:#f59e0b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">
+            ${medals[i]||''} ${escHtml(c.combo_type)}
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${escHtml(c.short_match)}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:8px">
+          <div style="font-size:22px;font-weight:800;color:#f59e0b;line-height:1">${(c.combined_odds||0).toFixed(2)}</div>
+          <div style="font-size:10px;color:var(--text-dim)">cote combo</div>
+        </div>
+      </div>
+      ${picksHtml}
+      <div style="margin-top:8px;font-size:10px;color:var(--text-dim);font-style:italic">
+        Score valeur moyen : ${c.avg_score}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMLBComboResultCards(combos) {
+  const block    = document.getElementById('mlb-combo-results-block');
+  const cards    = document.getElementById('mlb-combo-result-cards');
+  const countEl  = document.getElementById('combo-results-count');
+  if (!block || !cards) return;
+  const visible = (combos || []).filter(c => c.combo_outcome !== 'pending');
+  if (!combos || !combos.length) { block.style.display = 'none'; return; }
+  block.style.display = '';
+  if (countEl) countEl.textContent = combos.length + ' combo' + (combos.length > 1 ? 's' : '');
+  const medals = ['🥇','🥈','🥉'];
+  cards.innerHTML = combos.map((c, i) => {
+    const isWin  = c.combo_outcome === 'win';
+    const isLoss = c.combo_outcome === 'loss';
+    const borderColor = isWin ? 'var(--win)' : isLoss ? 'var(--red)' : 'var(--border)';
+    const bgTint      = isWin ? 'rgba(34,197,94,.08)' : isLoss ? 'rgba(248,81,73,.08)' : 'var(--card)';
+    const badge       = isWin
+      ? `<span style="font-size:15px;font-weight:800;color:var(--win)">✅ GAGNÉ</span>`
+      : isLoss
+      ? `<span style="font-size:15px;font-weight:800;color:var(--red)">❌ PERDU</span>`
+      : `<span style="font-size:13px;color:var(--text-dim)">⏳ En attente</span>`;
+    const picksHtml = (c.picks || []).map(p => {
+      const ic  = p.outcome === 'win' ? '✅' : p.outcome === 'loss' ? '❌' : '⏳';
+      const sel = (p.selection || '').replace(/\(.*?\)/g,'').trim();
+      const bt  = (p.bet_type  || '').replace(/\(.*?\)/g,'').trim();
+      return `<div style="display:flex;justify-content:space-between;align-items:center;
+                          padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim)">${escHtml(bt)}</div>
+          <div style="font-size:12px;font-weight:600">${ic} ${escHtml(sel)}</div>
+        </div>
+        <div style="font-size:13px;color:var(--text-dim);margin-left:8px">×${p.odds||'?'}</div>
+      </div>`;
+    }).join('');
+    return `<div style="background:${bgTint};border:1.5px solid ${borderColor};border-radius:12px;
+                        padding:14px 16px;min-width:220px;max-width:260px;flex:1">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700;color:#f59e0b">${medals[i]||''} ${escHtml(c.combo_type)}</span>
+        ${badge}
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">${escHtml(c.short_match||c.match)}</div>
+      ${picksHtml}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <span style="font-size:11px;color:var(--text-dim)">Cote combo</span>
+        <span style="font-size:20px;font-weight:800;color:#f59e0b">${(c.combined_odds||0).toFixed(2)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMLBComboHistory(data) {
+  const section = document.getElementById('stats-combos-section');
+  const cards   = document.getElementById('stats-combo-cards');
+  const summary = document.getElementById('stats-combo-summary');
+  if (!section || !cards) return;
+
+  const combos = (data.combos || []).filter(c => c.combo_outcome !== 'pending');
+  if (!combos.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const s = data.summary || {};
+  if (summary && s.resolved) {
+    const wr = s.win_rate != null ? s.win_rate + '%' : '—';
+    const wrColor = s.win_rate >= 55 ? 'var(--win)' : s.win_rate < 40 ? 'var(--red)' : 'var(--yellow)';
+    summary.innerHTML = `<span style="color:${wrColor};font-weight:700">${s.wins}V / ${s.losses}D</span>
+      &nbsp;·&nbsp; <span style="color:${wrColor}">${wr} réussite</span>
+      &nbsp;·&nbsp; ${s.resolved} combo${s.resolved > 1 ? 's' : ''} résolus`;
+  }
+
+  const medals = ['🥇','🥈','🥉'];
+  // Regrouper par date — afficher les 3 plus récentes journées avec combos
+  const byDate = {};
+  combos.forEach(c => { (byDate[c.date] = byDate[c.date] || []).push(c); });
+  const recentDates = Object.keys(byDate).sort().reverse().slice(0, 3);
+
+  cards.innerHTML = recentDates.flatMap(d => {
+    const dayCombos = byDate[d];
+    const dp = d.split('-');
+    const dateLabel = `${parseInt(dp[2])} ${['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'][parseInt(dp[1])-1]} ${dp[0]}`;
+    const headerHtml = `<div style="width:100%;font-size:11px;color:var(--text-dim);font-weight:600;
+                                    margin-bottom:4px;padding-top:4px">${dateLabel}</div>`;
+    const comboCards = dayCombos.map((c, i) => {
+      const isWin  = c.combo_outcome === 'win';
+      const isLoss = c.combo_outcome === 'loss';
+      const border = isWin ? 'var(--win)' : isLoss ? 'var(--red)' : 'var(--border)';
+      const bg     = isWin ? 'rgba(34,197,94,.08)' : isLoss ? 'rgba(248,81,73,.08)' : 'var(--card)';
+      const icon   = isWin ? '✅' : isLoss ? '❌' : '⏳';
+      const picksHtml = (c.picks||[]).map(p => {
+        const pic = p.outcome==='win'?'✅':p.outcome==='loss'?'❌':'⏳';
+        const sel = (p.selection||'').replace(/\(.*?\)/g,'').trim();
+        return `<div style="font-size:11px;padding:2px 0">${pic} ${escHtml(sel)} <span style="color:var(--text-dim)">×${p.odds||'?'}</span></div>`;
+      }).join('');
+      return `<div style="background:${bg};border:1.5px solid ${border};border-radius:10px;
+                          padding:10px 12px;min-width:180px;max-width:240px;flex:1">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:11px;font-weight:700;color:#f59e0b">${medals[i]||''} ${escHtml(c.combo_type)}</span>
+          <span style="font-size:14px">${icon}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${escHtml(c.short_match||c.match)}</div>
+        ${picksHtml}
+        <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
+          <span style="font-size:10px;color:var(--text-dim)">Cote combo</span>
+          <span style="font-size:17px;font-weight:800;color:#f59e0b">${(c.combined_odds||0).toFixed(2)}</span>
+        </div>
+      </div>`;
+    }).join('');
+    return [`<div style="width:100%;display:flex;gap:4px;flex-wrap:wrap">${headerHtml}${comboCards}</div>`];
+  }).join('');
+}
+
+function renderStats(data, weightsData) {
+  hide('stats-loading');
+
+  // ── Bilan global ──────────────────────────────────────────────
+  const g = data.global || {};
+  const nPreds = g.n_preds ?? g.total ?? 0;
+  const cards = [
+    { label: 'Jours de données', value: data.days ?? '—', color: 'var(--text)' },
+    { label: 'Paris misés', value: g.total ?? '—', color: 'var(--text)' },
+    { label: 'Prédictions (calibration)', value: nPreds,
+      color: 'var(--text-dim)', title: 'Toutes prédictions bet + non-bet utilisées pour la calibration' },
+    { label: 'Victoires', value: g.wins ?? '—', color: 'var(--win)' },
+    { label: 'Défaites', value: g.losses ?? '—', color: 'var(--red)' },
+    { label: '% Victoires', value: g.win_rate != null ? g.win_rate + '%' : '—',
+      color: g.win_rate >= 55 ? 'var(--win)' : g.win_rate < 45 ? 'var(--red)' : 'var(--yellow)' },
+    { label: 'ROI total', value: g.roi != null ? (g.roi >= 0 ? '+$' : '-$') + Math.abs(g.roi).toFixed(2) : '—',
+      color: g.roi >= 0 ? 'var(--win)' : 'var(--red)' },
+    { label: 'ROI %', value: g.roi_pct != null ? (g.roi_pct >= 0 ? '+' : '') + g.roi_pct + '%' : '—',
+      color: g.roi_pct >= 0 ? 'var(--win)' : 'var(--red)' },
+  ];
+  const cs = data.combo_stats || {};
+  if (cs.resolved) {
+    const wrC = cs.win_rate >= 55 ? 'var(--win)' : cs.win_rate < 40 ? 'var(--red)' : 'var(--yellow)';
+    cards.push({ label: 'Combos (réussite)', value: cs.wins + 'V/' + cs.losses + 'D · ' + (cs.win_rate ?? '—') + '%', color: wrC });
+  }
+  document.getElementById('stats-global-cards').innerHTML = cards.map(c =>
+    `<div class="stat-global-card"><div class="label">${c.label}</div>
+     <div class="value" style="color:${c.color}">${c.value}</div></div>`
+  ).join('');
+
+  // ── Par type de pari ──────────────────────────────────────────
+  const typeBody = document.getElementById('stats-type-tbody');
+  typeBody.innerHTML = Object.entries(data.by_type || {})
+    .sort((a,b) => b[1].total - a[1].total)
+    .map(([k,v]) => `<tr>
+      <td>${k}</td><td>${v.total}</td><td style="color:var(--win)">${v.wins}</td>
+      <td style="color:var(--red)">${v.losses}</td><td>${_winRateCell(v.win_rate)}</td>
+      <td>${_roiCell(v.roi)}</td></tr>`).join('');
+
+  // ── Par recommandation ────────────────────────────────────────
+  const recOrder = ['Excellent ★★★','Bon ★★','Neutre','À éviter'];
+  const recBody = document.getElementById('stats-rec-tbody');
+  recBody.innerHTML = Object.entries(data.by_rec || {})
+    .sort((a,b) => recOrder.indexOf(a[0]) - recOrder.indexOf(b[0]))
+    .map(([k,v]) => `<tr>
+      <td>${k}</td><td>${v.total}</td><td style="color:var(--win)">${v.wins}</td>
+      <td style="color:var(--red)">${v.losses}</td><td>${_winRateCell(v.win_rate)}</td>
+      <td>${_roiCell(v.roi)}</td></tr>`).join('');
+
+  // ── Par fourchette de cotes ───────────────────────────────────
+  const oddsBody = document.getElementById('stats-odds-tbody');
+  oddsBody.innerHTML = Object.entries(data.by_odds || {})
+    .map(([k,v]) => `<tr>
+      <td>${k}</td><td>${v.total}</td><td style="color:var(--win)">${v.wins}</td>
+      <td style="color:var(--red)">${v.losses}</td><td>${_winRateCell(v.win_rate)}</td>
+      <td>${_roiCell(v.roi)}</td></tr>`).join('');
+
+  // ── Calibration ───────────────────────────────────────────────
+  const calibBody = document.getElementById('stats-calib-tbody');
+  calibBody.innerHTML = (data.calibration || []).map(c => {
+    const diff = c.actual - c.predicted;
+    const diffStr = (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%';
+    const diffCls = Math.abs(diff) <= 5 ? 'calib-good' : 'calib-bad';
+    return `<tr>
+      <td>${c.label}</td><td>${c.count}</td>
+      <td>${_winRateCell(c.actual)}</td>
+      <td><span class="${diffCls}">${diffStr}</span></td></tr>`;
+  }).join('') || '<tr><td colspan="4" style="color:var(--text-dim);text-align:center">Données insuffisantes</td></tr>';
+
+  // ── Par équipe ────────────────────────────────────────────────
+  const teamBody = document.getElementById('stats-team-tbody');
+  teamBody.innerHTML = (data.by_team || []).map(t => `<tr>
+    <td>${t.team}</td><td>${t.total}</td>
+    <td style="color:var(--win)">${t.wins}</td>
+    <td style="color:var(--red)">${t.losses}</td>
+    <td style="color:var(--text-dim)">${t.pushes}</td>
+    <td>${_winRateCell(t.win_rate)}</td>
+    <td>${_roiCell(t.roi)}</td></tr>`).join('');
+
+  // ── Poids adaptatifs ──────────────────────────────────────────
+  if (weightsData) renderWeights(weightsData);
+
+  // ── Météo ─────────────────────────────────────────────────────
+  const ws = data.weather_stats || {};
+  const weatherSection = document.getElementById('stats-weather-section');
+  if (ws.note && !ws.by_bracket) {
+    // not enough data
+    document.getElementById('stats-weather-note').textContent = ws.note;
+    weatherSection.style.display = '';
+    document.getElementById('stats-weather-cards').innerHTML = '';
+    document.getElementById('stats-weather-correlation').innerHTML = '';
+  } else if (ws.by_bracket && Object.keys(ws.by_bracket).length) {
+    weatherSection.style.display = '';
+    const bracketOrder = ['Très favorable Over', 'Favorable Over', 'Neutre', 'Favorable Under'];
+    const bracketEmoji = {
+      'Très favorable Over': '🔥',
+      'Favorable Over': '⬆️',
+      'Neutre': '➡️',
+      'Favorable Under': '⬇️',
+    };
+    const bracketColor = {
+      'Très favorable Over': '#f59e0b',
+      'Favorable Over': '#fb923c',
+      'Neutre': 'var(--text-dim)',
+      'Favorable Under': '#38bdf8',
+    };
+    const cardsHtml = bracketOrder
+      .filter(k => ws.by_bracket[k])
+      .map(k => {
+        const b = ws.by_bracket[k];
+        const total = b.n ?? b.total ?? 0;
+        const wr = b.win_rate ?? (b.wins && total ? Math.round(b.wins / total * 100) : null);
+        const wrStr = wr != null ? wr + '%' : '—';
+        const wrColor = wr == null ? 'var(--text-dim)' : wr >= 55 ? 'var(--win)' : wr < 40 ? 'var(--red)' : 'var(--yellow)';
+        const color = bracketColor[k] || 'var(--text-dim)';
+        const range = b.adj_range ? `<div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">Ajust. météo : ${b.adj_range}</div>` : '';
+        return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <div style="font-size:13px;font-weight:600;color:${color};margin-bottom:4px">${bracketEmoji[k]||''} ${k}</div>
+          ${range}
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px">
+            <span>Paris</span><span style="color:var(--text)">${total}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px">
+            <span>V / D</span><span><span style="color:var(--win)">${b.wins}</span> / <span style="color:var(--red)">${b.losses||0}</span></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700">
+            <span style="color:var(--text-dim)">% Victoires</span><span style="color:${wrColor}">${wrStr}</span>
+          </div>
+        </div>`;
+      }).join('');
+    document.getElementById('stats-weather-cards').innerHTML = cardsHtml || '<p style="color:var(--text-dim)">Aucune donnée météo dans les snapshots.</p>';
+
+    // Correlation row
+    let corrHtml = '';
+    const _corrBlock = (label, corr) => {
+      if (!corr) return '';
+      const delta = corr.delta ?? 0;
+      const sign = delta >= 0 ? '+' : '';
+      const color = delta >= 10 ? 'var(--win)' : delta <= -10 ? 'var(--red)' : 'var(--text-dim)';
+      return `<span style="margin-right:24px">${label} <strong style="color:${color}">${sign}${delta.toFixed(1)}%</strong>
+        <span style="color:var(--text-dim);font-size:10px">(aligné ${corr.aligned_wr?.toFixed(0)}% n=${corr.aligned_n} vs contraire ${corr.contrary_wr?.toFixed(0)}% n=${corr.contrary_n})</span>
+      </span>`;
+    };
+    if (ws.over_correlation || ws.under_correlation) {
+      corrHtml = `
+        <div style="margin-bottom:4px;font-size:11px;color:var(--text-dim)">Météo alignée vs contraire au pari — delta taux de victoire :</div>
+        <div style="font-size:12px">
+          ${_corrBlock('📈 Over', ws.over_correlation)}
+          ${_corrBlock('📉 Under', ws.under_correlation)}
+          <span style="color:var(--text-dim);font-size:11px">(${ws.total_with_data} paris avec données météo)</span>
+        </div>`;
+    }
+    document.getElementById('stats-weather-correlation').innerHTML = corrHtml;
+    document.getElementById('stats-weather-note').textContent = ws.note || '';
+  } else {
+    weatherSection.style.display = 'none';
+  }
+
+  // ── Comparaison des modes ─────────────────────────────────────────
+  const byMode = data.by_mode || {};
+  const byModeDaily = data.by_mode_daily || {};
+  if (Object.keys(byMode).length > 0) {
+    const modesSection = document.getElementById('stats-modes-section');
+    modesSection.style.display = '';
+
+    // Cartes côte-à-côte
+    const modeCards = document.getElementById('stats-modes-cards');
+    const mk = { "standard": { label: "Standard", color: "#3fb950" }, "conservative": { label: "Conservateur 🛡", color: "#fb923c" } };
+    modeCards.innerHTML = Object.entries(byMode).map(([mode, stats]) => {
+      const info = mk[mode] || { label: mode, color: "#79c0ff" };
+      return `<div class="stat-global-card" style="border-left:4px solid ${info.color}">
+        <div style="font-weight:600;margin-bottom:8px;color:${info.color}">${info.label}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+          <div><span style="color:var(--text-dim)">Paris</span><br><strong>${stats.total}</strong></div>
+          <div><span style="color:var(--text-dim)">Victoires</span><br><strong style="color:var(--win)">${stats.wins}</strong>/${stats.losses}</div>
+          <div><span style="color:var(--text-dim)">% Victoires</span><br><strong style="color:${stats.win_rate >= 55 ? 'var(--win)' : stats.win_rate < 45 ? 'var(--red)' : 'var(--yellow)'}">${stats.win_rate ?? '—'}%</strong></div>
+          <div><span style="color:var(--text-dim)">ROI</span><br><strong style="color:${stats.roi >= 0 ? 'var(--win)' : 'var(--red)'}">${stats.roi >= 0 ? '+' : ''}$${Math.abs(stats.roi).toFixed(2)}</strong></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Graphique cumulatif
+    if (byModeDaily.standard && byModeDaily.standard.length) {
+      renderModesCumulChart(byModeDaily);
+    }
+  } else {
+    document.getElementById('stats-modes-section').style.display = 'none';
+  }
+
+  show('stats-content');
+}
+
+// ── Onglet 4 : Live ─────────────────────────────────────────────
+
+let _liveInterval = null;
+let _liveSort = { col: null, dir: 'desc' };
+
+function startLivePolling() {
+  stopLivePolling();
+  _liveInterval = setInterval(() => loadLive(false), 30000);
+}
+function stopLivePolling() {
+  if (_liveInterval) { clearInterval(_liveInterval); _liveInterval = null; }
+}
+
+async function loadLive(showSpinner = true) {
+  const el = document.getElementById('live-container');
+  if (showSpinner) {
+    el.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Chargement des scores MLB…</p></div>`;
+  }
+  try {
+    const resp = await fetch('/api/mlb-live');
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      if (d.error === 'no_snapshot') {
+        el.innerHTML = `<div class="empty-state">
+          <div class="icon">📭</div>
+          <h3>Aucun snapshot pour aujourd'hui</h3>
+          <p>Clique sur <strong>💾 Sauvegarder</strong> dans l'onglet Prévisions pour créer un snapshot.</p>
+        </div>`;
+      } else {
+        el.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Erreur</h3><p>${d.error||'Inconnue'}</p></div>`;
+      }
+      return;
+    }
+    const data = await resp.json();
+    el.innerHTML = renderLive(data);
+    document.getElementById('badge-live').textContent = data.picks?.length ?? '—';
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Erreur réseau</h3><p>${e.message}</p></div>`;
+  }
+}
+
+function renderLive(data) {
+  const picks = data.picks || [];
+  const bets  = picks.filter(p => p.is_bet);
+  const preds = picks.filter(p => !p.is_bet);
+  const net   = data.net ?? 0;
+  const netStr = (net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2);
+  const netCls = net >= 0 ? 'gain-pos' : 'gain-neg';
+
+  // En-tête résumé
+  let html = `
+  <div style="padding:20px 24px">
+    <div class="live-header">
+      <div class="live-summary">
+        <div class="live-chip">
+          <div class="lc-label">Date</div>
+          <div class="lc-val" style="font-size:13px">${formatDate(data.date)}</div>
+        </div>
+        <div class="live-chip">
+          <div class="lc-label">Mises</div>
+          <div class="lc-val">${bets.length}${preds.length ? ' <span style="font-size:11px;color:var(--text-dim)">+' + preds.length + '</span>' : ''}</div>
+        </div>
+        <div class="live-chip">
+          <div class="lc-label">Victoires</div>
+          <div class="lc-val" style="color:var(--win)">${data.wins??0}</div>
+        </div>
+        <div class="live-chip">
+          <div class="lc-label">Défaites</div>
+          <div class="lc-val" style="color:var(--red)">${data.losses??0}</div>
+        </div>
+        <div class="live-chip">
+          <div class="lc-label">Net</div>
+          <div class="lc-val ${netCls}">${netStr}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--text-dim)">Actualisé à ${data.fetched_at||''}</span>
+        <button class="btn" onclick="loadLive(true)" style="font-size:12px;padding:5px 10px">↺</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30px">#</th>
+            <th>MATCH / TYPE DE PARI</th>
+            <th class="center" style="width:80px">SÉLECTION</th>
+            <th class="center" style="width:65px">COTE</th>
+            <th class="center" style="width:70px">MISE</th>
+            <th class="center" style="width:110px">GAIN/PERTE</th>
+            <th class="center" style="width:140px">RÉSULTAT</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  // Trier : live en premier, puis win/loss, puis pending
+  const order = { live: 0, win: 1, loss: 2, pending: 3 };
+  const sortFn = (a, b) => (order[a.outcome] ?? 9) - (order[b.outcome] ?? 9);
+
+  function makeRow(p, rank, isBet) {
+    const medal = rank === 1 ? '<span class="medal-1">&#127947;</span>'
+                : rank === 2 ? '<span class="medal-2">&#127948;</span>'
+                : rank === 3 ? '<span class="medal-3">&#127949;</span>'
+                : `<span style="color:var(--text-dim);font-size:13px">${rank}</span>`;
+
+    const odds  = p.odds || 2.0;
+    const mise  = isBet ? (p.mise || 0) : 0;
+    const oddsClass = odds <= 1.60 ? 'odds-low' : odds <= 2.20 ? 'odds-mid' : odds <= 3.50 ? 'odds-high' : 'odds-very';
+
+    let outcomeHtml = '', gainHtml = '';
+    if (p.outcome === 'win') {
+      outcomeHtml = `<span class="outcome-win">&#10003; Victoire</span>`;
+      gainHtml    = isBet ? `<span class="gain-pos">+$${(mise*(odds-1)).toFixed(2)}</span>` : `<span class="gain-pos">&#10003;</span>`;
+    } else if (p.outcome === 'loss') {
+      outcomeHtml = `<span class="outcome-loss">&#10005; Défaite</span>`;
+      gainHtml    = isBet ? `<span class="gain-neg">-$${mise.toFixed(2)}</span>` : `<span class="gain-neg">&#10005;</span>`;
+    } else if (p.outcome === 'live') {
+      outcomeHtml = `<span class="outcome-live">&#9679; En cours</span>`;
+      gainHtml    = isBet ? `<span class="gain-pot">pot. +$${(mise*(odds-1)).toFixed(2)}</span>` : `<span class="gain-pot">&#9679;</span>`;
+    } else if (p.score_str && p.score_str.startsWith('Report')) {
+      outcomeHtml = `<span style="color:var(--text-dim);font-size:12px">Reporté</span>`;
+      gainHtml    = `<span style="color:var(--text-dim)">—</span>`;
+    } else {
+      const startTxt = p.start_local || 'À venir';
+      outcomeHtml = `<span style="color:var(--text-dim);font-size:12px">&#128336; ${startTxt}</span>`;
+      gainHtml    = isBet ? `<span class="gain-pot">pot. +$${(mise*(odds-1)).toFixed(2)}</span>` : `<span style="color:var(--text-dim)">—</span>`;
+    }
+
+    const scoreHtml = p.score_str
+      ? `<div class="live-score ${p.outcome === 'live' ? 'live' : p.outcome === 'win' || p.outcome === 'loss' ? 'final' : 'pre'}">${p.score_str}</div>`
+      : '';
+
+    const selAbbrev = mlbTeamAbbrev(p.selection || '');
+    const selLogo   = selAbbrev
+      ? `<img src="https://a.espncdn.com/i/teamlogos/mlb/500/${selAbbrev}.png" style="width:44px;height:44px;object-fit:contain" alt="${selAbbrev}" onerror="this.style.display='none'">`
+      : `<span style="font-size:12px;font-weight:600">${p.selection||'?'}</span>`;
+
+    const miseHtml = isBet
+      ? `<span style="color:var(--win);font-weight:700">$${mise.toFixed(2)}</span>`
+      : `<span style="color:var(--text-dim);font-size:11px">—</span>`;
+
+    return `
+      <tr style="${isBet ? '' : 'opacity:0.72'}">
+        <td style="text-align:center">${medal}</td>
+        <td class="match-cell">
+          ${mlbMatchLogosHtml(p.away_team, p.home_team)}
+          <div class="meta" style="text-align:center;margin-top:4px">${p.bet_type||''}</div>
+          ${scoreHtml ? `<div style="text-align:center;margin-top:4px">${scoreHtml}</div>` : ''}
+        </td>
+        <td class="center">${selLogo}</td>
+        <td class="center"><span class="${oddsClass}">${odds.toFixed(2)}</span></td>
+        <td class="center">${miseHtml}</td>
+        <td class="center">${gainHtml}</td>
+        <td class="center">${outcomeHtml}</td>
+      </tr>`;
+  }
+
+  // Paris misés
+  const sortedBets = [...bets].sort(sortFn);
+  sortedBets.forEach((p, i) => { html += makeRow(p, i + 1, true); });
+
+  // Séparateur + prédictions non-misées
+  if (preds.length) {
+    html += `<tr><td colspan="7" style="padding:6px 10px;background:var(--bg3);font-size:11px;color:var(--text-dim);font-style:italic;border-top:2px solid var(--border)">
+      Prédictions analysées (non misées) — ${preds.length} entrée${preds.length > 1 ? 's' : ''}
+    </td></tr>`;
+    const sortedPreds = [...preds].sort(sortFn);
+    sortedPreds.forEach((p, i) => { html += makeRow(p, bets.length + i + 1, false); });
+  }
+
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+// ── Onglet V2 ────────────────────────────────────────────────────
+
+const _SIGNAL_LABELS = {
+  underdog_value: { fr: 'Valeur Dog', icon: '🐶' },
+  bullpen_rest:   { fr: 'Repos Bullpen', icon: '💪' },
+  public_bias:    { fr: 'Biais Public', icon: '📊' },
+  pitcher_split:  { fr: 'Split L/R', icon: '🤾' },
+};
+
+async function analyzeV2() {
+  _v2Loaded = true;
+  document.getElementById('v2-loading').style.display = '';
+  document.getElementById('v2-empty').style.display = 'none';
+  document.getElementById('v2-picks-section').style.display = 'none';
+  document.getElementById('btn-analyze-v2').disabled = true;
+
+  try {
+    const v2Budget = parseFloat(document.getElementById('v2-budget').value) || 10;
+    const [picksResp, statsResp] = await Promise.all([
+      fetch('/api/analyze_v2?top=10'),
+      fetch(`/api/stats_v2?budget=${v2Budget}`),
+    ]);
+
+    document.getElementById('v2-loading').style.display = 'none';
+    document.getElementById('btn-analyze-v2').disabled = false;
+
+    if (!picksResp.ok) throw new Error('Erreur API V2');
+    const data = await picksResp.json();
+    const picks = data.picks || [];
+
+    // Timestamp
+    document.getElementById('v2-timestamp').textContent =
+      'Analysé à ' + (data.timestamp || new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}));
+
+    // Badge onglet
+    document.getElementById('badge-v2').textContent = picks.length || '0';
+
+    if (picks.length === 0) {
+      document.getElementById('v2-empty').style.display = '';
+    } else {
+      // ── Calcul des mises proportionnelles au score composite ──
+      const budget = parseFloat(document.getElementById('v2-budget').value) || 10;
+      const totalScore = picks.reduce((s, p) => s + p.composite_score, 0);
+      const MIN_BET = 0.50;
+      let mises = picks.map(p => {
+        const raw = totalScore > 0 ? (p.composite_score / totalScore) * budget : budget / picks.length;
+        // Arrondir au 0.50 le plus proche, minimum 0.50
+        return Math.max(MIN_BET, Math.round(raw * 2) / 2);
+      });
+      // Ajuster le pick le plus fort pour coller exactement au budget
+      const totalMise = mises.reduce((s, m) => s + m, 0);
+      const diff = Math.round((budget - totalMise) * 2) / 2;
+      if (diff !== 0 && mises.length > 0) {
+        const maxIdx = mises.indexOf(Math.max(...mises));
+        mises[maxIdx] = Math.max(MIN_BET, Math.round((mises[maxIdx] + diff) * 2) / 2);
+      }
+      // Attacher la mise à chaque pick
+      const picksWithMise = picks.map((p, i) => ({ ...p, mise: mises[i] }));
+
+      document.getElementById('v2-picks-section').style.display = '';
+      const totalMiseAff = mises.reduce((s, m) => s + m, 0).toFixed(2);
+      document.getElementById('v2-picks-count').textContent =
+        `${picks.length} pick${picks.length > 1 ? 's' : ''} V2 · Budget ${budget}$ réparti (total misé : ${totalMiseAff}$)`;
+      renderV2Picks(picksWithMise);
+    }
+
+    // Stats historiques
+    if (statsResp.ok) {
+      const stats = await statsResp.json();
+      renderV2Stats(stats);
+    }
+
+  } catch(e) {
+    document.getElementById('v2-loading').style.display = 'none';
+    document.getElementById('v2-empty').style.display = '';
+    document.getElementById('btn-analyze-v2').disabled = false;
+    console.error('V2 error:', e);
+  }
+}
+
+function renderV2Picks(picks) {
+  const container = document.getElementById('v2-picks-list');
+  container.innerHTML = picks.map(p => {
+    const confColor = p.confidence.includes('Fort') ? 'var(--win)' :
+                      p.confidence.includes('Moyen') ? 'var(--yellow)' : 'var(--orange)';
+    const scoreBar = Math.min(100, Math.max(0, p.composite_score));
+
+    const signalHtml = (p.signals || []).map(s => {
+      const lbl  = _SIGNAL_LABELS[s.name] || { fr: s.name, icon: '•' };
+      const val  = s.score;
+      const col  = val > 0.1 ? 'var(--win)' : val < -0.1 ? 'var(--red)' : 'var(--text-dim)';
+      const sign = val >= 0 ? '+' : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;
+                           padding:5px 0;border-bottom:1px solid var(--border);font-size:11px">
+        <span style="color:var(--text-dim)">${lbl.icon} ${lbl.fr}</span>
+        <span style="display:flex;gap:12px;align-items:center">
+          <span style="color:var(--text-dim);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.description || ''}</span>
+          <strong style="color:${col};min-width:36px;text-align:right">${sign}${(val*100).toFixed(0)}</strong>
+        </span>
+      </div>`;
+    }).join('');
+
+    const pitcherTxt = (p.away_pitcher || p.home_pitcher)
+      ? `<span style="color:var(--text-dim);font-size:11px"> [${p.away_pitcher || '?'} vs ${p.home_pitcher || '?'}]</span>`
+      : '';
+
+    return `
+    <div style="background:var(--bg2);border:1px solid #0891b240;border-left:4px solid #0891b2;
+                border-radius:10px;padding:16px;margin-bottom:12px">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">
+            ${p.away_team} @ ${p.home_team} ${pitcherTxt}
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:3px">
+            ${p.date} ${p.time} • ${p.league}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--text-dim)">Score composite</div>
+          <div style="font-size:22px;font-weight:800;color:#22d3ee">${p.composite_score}</div>
+        </div>
+      </div>
+
+      <!-- Pick recommandé -->
+      <div style="background:linear-gradient(135deg,#0891b220,#0e749110);border-radius:8px;
+                  padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:3px">MISER SUR</div>
+          <div style="font-size:16px;font-weight:700;color:#22d3ee">⚾ ${p.bet_team}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:3px">${p.rationale}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:24px;font-weight:800;color:var(--text)">${p.odds.toFixed(2)}</div>
+          <div style="font-size:10px;color:var(--text-dim)">${p.implied_prob}% implicite</div>
+          <div style="font-size:11px;color:${confColor};margin-top:4px">${p.confidence}</div>
+          ${p.mise != null ? `<div style="margin-top:6px;padding:4px 10px;background:#0891b230;border-radius:20px;
+              font-size:13px;font-weight:700;color:#22d3ee">Mise : ${p.mise.toFixed(2)}$</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Signaux détail -->
+      <details style="cursor:pointer">
+        <summary style="font-size:11px;color:var(--text-dim);list-style:none;user-select:none">
+          ▸ Détail des signaux
+        </summary>
+        <div style="margin-top:8px">${signalHtml}</div>
+      </details>
+    </div>`;
+  }).join('');
+}
+
+function renderV2Stats(stats) {
+  const section = document.getElementById('v2-stats-section');
+  const total = stats.total || 0;
+  if (total === 0 && !stats.pending) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  // Cartes globales
+  const wr = stats.win_rate;
+  const wrColor = wr >= 55 ? 'var(--win)' : wr < 45 ? 'var(--red)' : 'var(--yellow)';
+  const roi = stats.roi || 0;
+  const roiColor = roi >= 0 ? 'var(--win)' : 'var(--red)';
+  const roiPct = stats.roi_pct;
+  const roiPctColor = (roiPct || 0) >= 0 ? 'var(--win)' : 'var(--red)';
+  document.getElementById('v2-stat-cards').innerHTML = [
+    { label: 'Paris résolus',             value: total,    color: 'var(--text)' },
+    { label: 'En attente',                value: stats.pending || 0, color: 'var(--text-dim)' },
+    { label: '% Victoires',               value: wr != null ? wr + '%' : '—', color: wrColor },
+    { label: `ROI (${stats.budget || 10}$/soir)`, value: (roi >= 0 ? '+' : '') + roi.toFixed(2) + '$', color: roiColor },
+    { label: 'ROI %',                     value: roiPct != null ? (roiPct >= 0 ? '+' : '') + roiPct + '%' : '—', color: roiPctColor },
+    { label: 'Total misé',                value: (stats.mise_total || 0).toFixed(2) + '$', color: 'var(--text-dim)' },
+  ].map(c => `<div class="stat-global-card">
+    <div class="label">${c.label}</div>
+    <div class="value" style="color:${c.color}">${c.value}</div>
+  </div>`).join('');
+
+  // Graphique ROI cumulatif
+  const lbl = document.getElementById('v2-chart-label');
+  if (lbl) lbl.textContent = `ROI cumulatif V2 (budget ${stats.budget || 10}$/soir, réparti par score)`;
+  const byDate = stats.by_date || [];
+  if (byDate.length && document.getElementById('chart-v2-roi')) {
+    if (_v2Chart) _v2Chart.destroy();
+    const labels = byDate.map(d => d.date.substring(5));
+    const cumuls = byDate.map(d => d.cumul_roi);
+    _v2Chart = new Chart(document.getElementById('chart-v2-roi'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'ROI cumulatif V2',
+          data: cumuls,
+          borderColor: '#22d3ee',
+          backgroundColor: 'rgba(34,211,238,0.08)',
+          fill: true, tension: 0.35, borderWidth: 2.5,
+          pointRadius: 4, pointBackgroundColor: '#22d3ee',
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `ROI cumulatif V2: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}$` } },
+        },
+        scales: {
+          x: { ticks: { color: '#9ca3af', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#9ca3af', font: { size: 10 }, callback: v => `${v >= 0 ? '+' : ''}${v}$` },
+               grid: { color: 'rgba(255,255,255,0.07)' } },
+        },
+      },
+    });
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  // Restaurer le mode (standard/conservateur) sauvegardé
+  try {
+    const savedMode = localStorage.getItem('mlb_mode');
+    if (savedMode) {
+      const sel = document.getElementById('mode-select');
+      if (sel) sel.value = savedMode;
+    }
+  } catch(e) {}
+  // Changer de mode relance l'analyse
+  const modeSel = document.getElementById('mode-select');
+  if (modeSel) modeSel.addEventListener('change', () => analyze());
+  analyze();
+});
+
+// ════════════════════════════════════════════════════════════════
+//  Onglet Comparaison de systèmes
+// ════════════════════════════════════════════════════════════════
+
+async function loadComparison() {
+  const flat     = document.getElementById('cmp-flat')?.value     || 10;
+  const cap      = document.getElementById('cmp-cap')?.value      || 5;
+  const bankroll = document.getElementById('cmp-bankroll')?.value || 100;
+  const pct      = document.getElementById('cmp-pct')?.value      || 10;
+  const cards = document.getElementById('cmp-cards');
+  const tbl   = document.getElementById('cmp-table');
+  if (cards) cards.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text-dim)">⏳ Chargement…</div>`;
+  if (tbl)   tbl.innerHTML = '';
+  try {
+    const res  = await fetch(`/api/compare-systems?flat=${flat}&cap=${cap}&bankroll_start=${bankroll}&nightly_pct=${pct}`);
+    const data = await res.json();
+    renderCmpCards(data.summary, data.params);
+    renderCmpChart(data.days);
+    renderCmpTable(data.picks);
+  } catch(e) {
+    if (cards) cards.innerHTML = `<div style="grid-column:1/-1;color:#f85149;padding:16px;">Erreur : ${e.message}</div>`;
+  }
+}
+
+function reloadComparison() {
+  loadComparison();
+}
+
+function renderCmpCards(summary, params) {
+  const container = document.getElementById('cmp-cards');
+  if (!container) return;
+  const systems = [
+    { key:'A', label:'Système A', sub:'½ Kelly Standard',
+      desc:'Tous les picks conseillés, dimensionnement Kelly',
+      accent:'#3fb950', bg:'rgba(63,185,80,0.08)', border:'rgba(63,185,80,0.25)' },
+    { key:'B', label:'Système B', sub:`Moneyline seulement (${params?.flat||10}$ flat)`,
+      desc:'Uniquement les paris Gagnant / 2 issues — mise plate',
+      accent:'#388bfd', bg:'rgba(56,139,253,0.08)', border:'rgba(56,139,253,0.25)' },
+    { key:'C', label:'Système C', sub:'Excellents ★★★ seulement',
+      desc:'Ne mise que sur les picks Excellent, mise Kelly',
+      accent:'#a78bfa', bg:'rgba(167,139,250,0.08)', border:'rgba(167,139,250,0.25)' },
+    { key:'D', label:'Système D', sub:`Kelly plafonné (max ${params?.cap||5}$)`,
+      desc:'Mise Kelly si ≤ plafond, sinon plafonnée — contrôle le risque',
+      accent:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.25)' },
+    { key:'E', label:'Système E', sub:'Under seulement',
+      desc:'Uniquement les paris "Moins de" — teste la sous-estimation systématique des Overs',
+      accent:'#38bdf8', bg:'rgba(56,189,248,0.08)', border:'rgba(56,189,248,0.25)' },
+    { key:'F', label:'Système F', sub:'Kelly dynamique',
+      desc:'Budget nuit = % du bankroll courant, distribué proportionnellement par ½ Kelly',
+      accent:'#fb923c', bg:'rgba(251,146,60,0.08)', border:'rgba(251,146,60,0.25)', dynamic:true },
+    { key:'G', label:'Système G', sub:'Conservateur (Phase 1)',
+      desc:'Cotes ≥1.80, bannit totaux, downgrade "Excellent" — stop-loss agressif',
+      accent:'#8b5cf6', bg:'rgba(139,92,246,0.08)', border:'rgba(139,92,246,0.25)' },
+  ];
+  container.innerHTML = systems.map(s => {
+    const d = summary[s.key] || {};
+    const netColor = col => col >= 0 ? '#3fb950' : '#f85149';
+    let mainVal, mainLabel;
+    if (s.dynamic) {
+      // Système F : afficher bankroll finale vs initiale
+      const init  = d.initial_bankroll || 0;
+      const final = d.final_bankroll   || 0;
+      const diff  = final - init;
+      mainVal   = diff;
+      mainLabel = `${final.toFixed(2)}$ bankroll`;
+    } else {
+      mainVal   = d.cumulative || 0;
+      mainLabel = null;
+    }
+    const mainColor = netColor(mainVal);
+    const mainSign  = mainVal >= 0 ? '+' : '';
+    const roiSign   = (d.roi||0) >= 0 ? '+' : '';
+    return `
+      <div style="background:${s.bg};border:1px solid ${s.border};border-radius:12px;padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div>
+            <div style="font-weight:700;font-size:13px;color:${s.accent}">${s.label}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${s.sub}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:20px;font-weight:800;color:${mainColor}">${mainSign}${mainVal.toFixed(2)}$</div>
+            ${mainLabel ? `<div style="font-size:10px;color:var(--text-dim)">${mainLabel}</div>` : ''}
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">${s.desc}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+          <div style="text-align:center">
+            <div style="font-size:16px;font-weight:700;color:var(--text)">${d.picks||0}</div>
+            <div style="font-size:10px;color:var(--text-dim)">paris</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:16px;font-weight:700;color:var(--text)">${d.win_rate||0}%</div>
+            <div style="font-size:10px;color:var(--text-dim)">victoires</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:16px;font-weight:700;color:${netColor(d.roi||0)}">${roiSign}${d.roi||0}%</div>
+            <div style="font-size:10px;color:var(--text-dim)">ROI</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+                    display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim)">
+          <span>${d.wins||0}V / ${d.losses||0}D</span>
+          ${s.dynamic
+            ? `<span>Init : ${(d.initial_bankroll||0).toFixed(0)}$ → Final : ${(d.final_bankroll||0).toFixed(2)}$</span>`
+            : `<span>Misé : ${(d.total_mise||0).toFixed(2)}$</span>`}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+let _gainJourChart = null;
+
+function renderCmpChart(days) {
+  if (_cmpChart) { _cmpChart.destroy(); _cmpChart = null; }
+  const canvas = document.getElementById('cmp-chart');
+  if (!canvas || !days?.length) return;
+  const labels = days.map(d => {
+    const p = d.date.split('-');
+    return `${+p[2]}/${+p[1]}`;
+  });
+  const mk = (label, color, key) => ({
+    label, data: days.map(d => d[key]?.cumulative ?? 0),
+    borderColor: color, backgroundColor: 'transparent',
+    pointBackgroundColor: color, pointRadius: 3, pointHoverRadius: 5,
+    tension: 0.3, borderWidth: 2, fill: false,
+  });
+  _cmpChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets: [
+      mk('A — Kelly ½',          '#3fb950', 'A'),
+      mk('B — Moneyline flat',   '#388bfd', 'B'),
+      mk('C — Excellents',       '#a78bfa', 'C'),
+      mk('D — Kelly plafonné',   '#f59e0b', 'D'),
+      mk('E — Under seulement',  '#38bdf8', 'E'),
+      mk('F — Kelly dynamique',  '#fb923c', 'F'),
+      mk('G — Conservateur',     '#8b5cf6', 'G'),
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color:'#8b949e', font:{size:11}, boxWidth:14, padding:14 }},
+        tooltip: { callbacks: { label: i => ` ${i.dataset.label} : ${i.raw>=0?'+':''}${i.raw.toFixed(2)}$` }},
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(255,255,255,0.05)' }},
+        y: { ticks: { color:'#8b949e', font:{size:10}, callback: v => `${v>=0?'+':''}${v}$` },
+             grid:  { color:'rgba(255,255,255,0.07)' }},
+      },
+    },
+  });
+}
+
+async function loadGainJourChart() {
+  const section = document.getElementById('stats-cumul-section');
+  if (!section) return;
+  try {
+    const res = await fetch(`/api/compare-systems?flat=10&cap=5&bankroll_start=100&nightly_pct=10`);
+    if (!res.ok) { section.style.display = 'none'; return; }
+    const data = await res.json();
+    if (!data.days || !data.days.length) { section.style.display = 'none'; return; }
+    renderGainJourChart(data.days);
+    section.style.display = '';
+  } catch(e) {
+    section.style.display = 'none';
+  }
+}
+
+function renderGainJourChart(days) {
+  if (_gainJourChart) { _gainJourChart.destroy(); _gainJourChart = null; }
+  const canvas = document.getElementById('chart-gain-jour');
+  if (!canvas || !days?.length) return;
+  const labels = days.map(d => {
+    const p = d.date.split('-');
+    return `${+p[2]}/${+p[1]}`;
+  });
+  const mk = (label, color, key) => ({
+    label, data: days.map(d => d[key]?.cumulative ?? 0),
+    borderColor: color, backgroundColor: 'transparent',
+    pointBackgroundColor: color, pointRadius: 3, pointHoverRadius: 5,
+    tension: 0.3, borderWidth: 2, fill: false,
+  });
+  _gainJourChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets: [
+      mk('A — Kelly ½',          '#3fb950', 'A'),
+      mk('B — Moneyline flat',   '#388bfd', 'B'),
+      mk('C — Excellents',       '#a78bfa', 'C'),
+      mk('D — Kelly plafonné',   '#f59e0b', 'D'),
+      mk('E — Under seulement',  '#38bdf8', 'E'),
+      mk('F — Kelly dynamique',  '#fb923c', 'F'),
+      mk('G — Conservateur',     '#8b5cf6', 'G'),
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color:'#8b949e', font:{size:11}, boxWidth:14, padding:14 }},
+        tooltip: { callbacks: { label: i => ` ${i.dataset.label} : ${i.raw>=0?'+':''}${i.raw.toFixed(2)}$` }},
+      },
+      scales: {
+        x: { ticks: { color:'#8b949e', font:{size:10} }, grid: { color:'rgba(255,255,255,0.05)' }},
+        y: { ticks: { color:'#8b949e', font:{size:10}, callback: v => `${v>=0?'+':''}${v}$` },
+             grid:  { color:'rgba(255,255,255,0.07)' }},
+      },
+    },
+  });
+}
+
+function renderCmpTable(picks) {
+  const container = document.getElementById('cmp-table');
+  if (!container) return;
+  if (!picks?.length) {
+    container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-dim)">Aucune donnée — sauvegarde des snapshots pour commencer.</div>';
+    return;
+  }
+  const fmtNet = (v, active) => {
+    if (!active) return '<span style="color:var(--text-dim)">—</span>';
+    const c = v >= 0 ? '#3fb950' : '#f85149';
+    return `<span style="color:${c};font-weight:600">${v>=0?'+':''}${v.toFixed(2)}$</span>`;
+  };
+  const rows = picks.map(p => {
+    const win = p.outcome === 'win';
+    const badge = win
+      ? `<span style="background:rgba(63,185,80,0.2);color:#3fb950;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700">✓ W</span>`
+      : `<span style="background:rgba(248,81,73,0.2);color:#f85149;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700">✗ L</span>`;
+    const edgeC = p.edge >= 7 ? '#3fb950' : p.edge >= 3 ? '#f59e0b' : '#8b949e';
+    const dp = p.date.split('-');
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px 10px;font-size:12px;color:var(--text-dim)">${+dp[2]}/${+dp[1]}</td>
+      <td style="padding:7px 10px;font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.match||''}">${p.selection||''}<br><span style="font-size:10px;color:var(--text-dim)">${(p.bet_type||'').substring(0,30)}</span></td>
+      <td style="padding:7px 10px;font-size:12px;text-align:center">${(p.odds||0).toFixed(2)}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:center;color:${edgeC};font-weight:600">${p.edge>0?'+':''}${(p.edge||0).toFixed(1)}%</td>
+      <td style="padding:7px 10px;text-align:center">${badge}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtNet(p.A_net, true)}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtNet(p.B_net, p.B_active)}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtNet(p.C_net, p.C_active)}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtNet(p.D_net, true)}${p.D_capped?' <span title="Plafonné" style="color:var(--text-dim);font-size:9px">⌀</span>':''}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtNet(p.E_net, p.E_active)}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtNet(p.F_net, p.F_net !== undefined && p.F_net !== null)}<br><span style="font-size:9px;color:var(--text-dim)">${p.F_bankroll != null ? p.F_bankroll.toFixed(2)+'$' : ''}</span></td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text-dim)">
+        Détail par pari — ${picks.length} picks résolus
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:var(--card);font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em">
+              <th style="padding:8px 10px;text-align:left">Date</th>
+              <th style="padding:8px 10px;text-align:left">Sélection</th>
+              <th style="padding:8px 10px;text-align:center">Cote</th>
+              <th style="padding:8px 10px;text-align:center">Edge</th>
+              <th style="padding:8px 10px;text-align:center">Résultat</th>
+              <th style="padding:8px 10px;text-align:right;color:#3fb950">A Kelly</th>
+              <th style="padding:8px 10px;text-align:right;color:#388bfd">B ML flat</th>
+              <th style="padding:8px 10px;text-align:right;color:#a78bfa">C Excell.</th>
+              <th style="padding:8px 10px;text-align:right;color:#f59e0b">D Plaf.</th>
+              <th style="padding:8px 10px;text-align:right;color:#38bdf8">E Under</th>
+              <th style="padding:8px 10px;text-align:right;color:#fb923c">F Kelly dyn.</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+</script>
+</body>
+</html>

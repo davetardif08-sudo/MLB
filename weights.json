@@ -1,0 +1,17 @@
+{
+  "weights": {
+    "pyth_wpct": 0.1591,
+    "home_away": 0.0603,
+    "recent_form": 0.086,
+    "runs_per_game": 0.1221,
+    "fip": 0.0687,
+    "woba": 0.0504,
+    "whip": 0.0218,
+    "starter_fip": 0.1778,
+    "starter_whip": 0.144,
+    "bullpen_era": 0.0324,
+    "run_diff": 0.0774
+  },
+  "updated_at": "2026-04-16T13:38:13.263085",
+  "stat_vs_math": 0.2
+}
