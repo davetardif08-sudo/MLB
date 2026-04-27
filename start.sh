@@ -1,7 +1,6 @@
 #!/bin/bash
-# Install Playwright browsers AND system dependencies
-python -m playwright install
-python -m playwright install-deps
+# Install Playwright browsers only (system deps should be in Dockerfile)
+python -m playwright install chromium
 
 # Start the Flask app
 python app.py
