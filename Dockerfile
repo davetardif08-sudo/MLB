@@ -42,4 +42,5 @@ COPY . .
 EXPOSE 8000
 
 # Run with Gunicorn (production WSGI server)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "300", "--access-logfile", "-", "app:app"]
+# Use PORT env var from Railway, default to 8000
+CMD sh -c 'gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 300 --access-logfile - app:app'
