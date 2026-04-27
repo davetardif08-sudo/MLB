@@ -338,7 +338,13 @@ class MiseOJeuMLBScraper:
     async def scrape(self) -> list[Match]:
         """Scrape les événements MLB de Mise-O-Jeu."""
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=self.headless)
+            browser = await pw.chromium.launch(
+                headless=self.headless,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-dev-shm-usage',  # Railway: no /dev/shm, use swap
+                ]
+            )
             context = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -349,15 +355,14 @@ class MiseOJeuMLBScraper:
                 viewport={"width": 1280, "height": 900},
             )
 
-            print("  >> Chargement de la page MLB Mise-O-Jeu...")
+            # Charger la page principale (même approche que NHL scraper)
+            # La page contient tous les sports, on filtre par baseball dans _parse_event()
+            print("  >> Chargement de la page principale Mise-O-Jeu...")
             page = await context.new_page()
             try:
-                await page.goto(BASE_SITE_MLB, wait_until='networkidle', timeout=30000)
+                await page.goto(BASE_SITE, wait_until='networkidle', timeout=30000)
             except Exception:
-                try:
-                    await page.wait_for_selector('a[href*="/evenement/"]', timeout=5000)
-                except Exception:
-                    await asyncio.sleep(2)
+                await asyncio.sleep(2)
 
             html    = await page.content()
             cookies = await context.cookies()
@@ -366,19 +371,15 @@ class MiseOJeuMLBScraper:
 
             await page.close()
 
-            event_data = self._extract_mlb_event_ids(html)
+            # Extraire TOUS les event IDs (tous les sports)
+            # _parse_event() filtre par baseball
+            event_data = self._extract_all_event_ids(html)
 
-            # Fallback : charger la page principale si la section MLB n'a rien retourné
-            if not event_data:
-                print("  >> Aucun événement sur la page MLB, essai page principale...")
-                page2 = await context.new_page()
-                try:
-                    await page2.goto(BASE_SITE, wait_until='networkidle', timeout=30000)
-                except Exception:
-                    await asyncio.sleep(2)
-                html2 = await page2.content()
-                await page2.close()
-                event_data = self._extract_mlb_event_ids(html2)
+            # Filtrer pour garder seulement les liens avec "baseball" dans l'URL
+            event_data = [
+                (eid, url) for eid, url in event_data
+                if 'baseball' in url.lower() or 'mlb' in url.lower()
+            ]
 
             print(f"     {len(event_data)} événements MLB trouvés")
 
@@ -441,28 +442,32 @@ class MiseOJeuMLBScraper:
         finally:
             await page.close()
 
-    def _extract_mlb_event_ids(self, html: str) -> list[tuple[str, str]]:
-        """Extrait les IDs et URLs des événements MLB."""
-        # Pattern URL MLB sur Mise-O-Jeu
-        patterns = [
-            r'(https://miseojeuplus\.espacejeux\.com/sports/fr/[^"\']*'
-            r'/evenement/(\d+)/baseball/[^"\'\\]*)',
+    def _extract_all_event_ids(self, html: str) -> list[tuple[str, str]]:
+        """
+        Extrait les IDs et URLs de tous les événements (même approche que NHL scraper).
+        Retourne une liste de tuples (event_id, event_url).
 
-            r'(https://miseojeuplus\.espacejeux\.com/sports/fr/en-jeux'
-            r'/evenement/(\d+)/baseball/[^"\'\\]*)',
-
-            # Variantes possibles
-            r'(https://miseojeuplus\.espacejeux\.com/sports/fr/[^"\']*'
-            r'/evenement/(\d+)/[^"\'\\]*mlb[^"\'\\]*)',
-        ]
+        Supporte deux formats d'URL:
+        - Ancien: /sports/fr/en-jeux/evenement/ID/baseball/amerique-du-nord/mlb/nom
+        - Nouveau: /sports/fr/sportif/evenement/ID  (sport détecté via contexte HTML)
+        """
         seen   = set()
         result = []
-        for pattern in patterns:
-            for full_url, eid in re.findall(pattern, html, re.IGNORECASE):
+
+        # Cherche les chemins relatifs dans les attributs href
+        # Pattern similaire à NHL, mais incluant baseball
+        base = "https://miseojeuplus.espacejeux.com"
+        patterns = [
+            (r'href="(/sports/fr/(?:en-jeux|sportif)/evenement/(\d+)/baseball/amerique-du-nord/mlb/[^"\'<>\s]*)"',
+             "baseball"),
+        ]
+
+        for pattern, sport in patterns:
+            for path, eid in re.findall(pattern, html):
                 if eid not in seen:
                     seen.add(eid)
-                    clean_url = full_url.rstrip('\\').rstrip('"').rstrip("'").rstrip('/')
-                    result.append((eid, clean_url))
+                    result.append((eid, base + path.rstrip('/')))
+
         return result
 
 
