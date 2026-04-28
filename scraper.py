@@ -1,17 +1,17 @@
 """
 Scraper pour miseojeu.lotoquebec.com — Sport MLB (Baseball)
 
-Architecture :
-  1. Charger la page liste : /fr/offre-de-paris/baseball/mlb/matchs?idAct=10
-  2. Extraire tous les liens de match (idEve=ID)
-  3. Pour chaque match, charger la page détail : ?idEve=ID
-  4. Parser le innerText de la page pour extraire marchés + cotes
+Architecture HYBRIDE:
+  1. Récupérer liste complète des matchs du jour via statsapi.mlb.com (officiel, pas de géo-blocage)
+  2. Charger miseojeu.lotoquebec.com pour les cotes de paris
+  3. Fusionner par match (away_team + home_team)
+  4. Pour chaque match trouvé sur Loto-Québec, charger les cotes détaillées
 
-Avantages vs miseojeuplus.espacejeux.com :
-  - HTML statique, pas de SPA React
-  - Pas de géo-blocage sur baseball
-  - Plus rapide (pas d'API REST séparée)
-  - Format des cotes simple (virgule → conversion en point)
+Avantages :
+  - 8+ matchs au lieu de 2 (couverture complète)
+  - Cotes officielles Loto-Québec pour les matchs disponibles
+  - Pas de géo-blocage
+  - Pas d'API REST complexe, juste HTML
 """
 
 import asyncio
@@ -470,7 +470,135 @@ class MiseOJeuMLBScraper:
             await page.close()
 
 
+def _get_mlb_com_matches() -> dict:
+    """
+    Récupère la liste officielle des matchs du jour depuis MLB.com.
+    Retourne un dict: {(away_name, home_name): {time, status, ...}}
+    """
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}"
+        r = _requests_mod.get(url, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        matches_map = {}
+        games = data.get('dates', [{}])[0].get('games', [])
+
+        for g in games:
+            away_name = g.get('teams', {}).get('away', {}).get('team', {}).get('name', '')
+            home_name = g.get('teams', {}).get('home', {}).get('team', {}).get('name', '')
+            game_time = g.get('gameDateTime', '')[:16]  # ISO format
+            status = g.get('status', {}).get('abstractGameState', '')
+
+            if away_name and home_name:
+                # Normaliser les noms pour matcher avec Loto-Québec
+                away_norm = _normalize_team_name_mlb(away_name)
+                home_norm = _normalize_team_name_mlb(home_name)
+                key = (away_norm, home_norm)
+                matches_map[key] = {
+                    'time': game_time,
+                    'status': status,
+                    'mlb_away': away_name,
+                    'mlb_home': home_name,
+                }
+
+        print(f"     MLB.com: {len(matches_map)} matchs trouvés")
+        return matches_map
+    except Exception as e:
+        print(f"  >> Erreur MLB.com: {e}")
+        return {}
+
+
+def _normalize_team_name_mlb(name: str) -> str:
+    """Convertit un nom MLB.com en nom Loto-Québec."""
+    # MLB.com: "Tampa Bay Rays" → Loto-Q: "Tampa Bay (Rays)"
+    mapping = {
+        "Tampa Bay Rays": "Tampa Bay (Rays)",
+        "Cleveland Guardians": "Cleveland (Guardians)",
+        "St. Louis Cardinals": "Saint-Louis (Cardinals)",
+        "Pittsburgh Pirates": "Pittsburgh (Pirates)",
+        "Boston Red Sox": "Boston (Red Sox)",
+        "Toronto Blue Jays": "Toronto (Blue Jays)",
+        "Los Angeles Angels": "Los Angeles (Angels)",
+        "Chicago White Sox": "Chicago (White Sox)",
+        "Seattle Mariners": "Seattle (Mariners)",
+        "Minnesota Twins": "Minnesota (Twins)",
+        "New York Yankees": "New York (Yankees)",
+        "Texas Rangers": "Texas (Rangers)",
+        "Chicago Cubs": "Chicago (Cubs)",
+        "San Diego Padres": "San Diego (Padres)",
+        "Miami Marlins": "Miami (Marlins)",
+        "Los Angeles Dodgers": "Los Angeles (Dodgers)",
+        "New York Mets": "New York (Mets)",
+        "Atlanta Braves": "Atlanta (Braves)",
+        "Philadelphia Phillies": "Philadelphia (Phillies)",
+        "Washington Nationals": "Washington (Nationals)",
+        "Milwaukee Brewers": "Milwaukee (Brewers)",
+        "Cincinnati Reds": "Cincinnati (Reds)",
+        "Detroit Tigers": "Detroit (Tigers)",
+        "Kansas City Royals": "Kansas City (Royals)",
+        "Houston Astros": "Houston (Astros)",
+        "Oakland Athletics": "Oakland (Athletics)",
+        "Colorado Rockies": "Colorado (Rockies)",
+        "Arizona Diamondbacks": "Arizona (Diamondbacks)",
+        "San Francisco Giants": "San Francisco (Giants)",
+        "Baltimore Orioles": "Baltimore (Orioles)",
+    }
+    return mapping.get(name, name)
+
+
+async def _enrich_matches_with_mlb(matches: list[Match]) -> list[Match]:
+    """
+    Ajoute les matchs de MLB.com qui ne sont pas dans les cotes Loto-Québec.
+    Crée des matchs "info only" sans cotes.
+    """
+    mlb_matches = _get_mlb_com_matches()
+    seen_keys = set()
+
+    for m in matches:
+        key = (m.away_team, m.home_team)
+        seen_keys.add(key)
+
+    # Créer des matchs sans cotes pour les matchs manquants
+    enriched = list(matches)
+    for key, mlb_info in mlb_matches.items():
+        if key not in seen_keys:
+            away_team, home_team = key
+            # Parser le temps ISO
+            try:
+                dt = datetime.fromisoformat(mlb_info['time'].replace('Z', '+00:00'))
+                # Convertir en heure locale (UTC-4 en avril)
+                local = dt - timedelta(hours=4)
+                date_str = local.strftime('%Y-%m-%d')
+                time_str = local.strftime('%H:%M')
+            except Exception:
+                date_str = datetime.now().strftime('%Y-%m-%d')
+                time_str = ''
+
+            # Créer un match sans cotes (pour le carousel uniquement)
+            new_match = Match(
+                sport="baseball",
+                league="MLB",
+                home_team=home_team,
+                away_team=away_team,
+                date=date_str,
+                time=time_str,
+                event_id=f"mlb_{key[0]}_{key[1]}",  # ID synthétique
+                event_url=f"https://mlb.com",
+            )
+            enriched.append(new_match)
+
+    return enriched
+
+
 def scrape_sync(headless: bool = True) -> list[Match]:
-    """Point d'entrée synchrone."""
+    """
+    Point d'entrée synchrone.
+    Combine Loto-Québec (cotes) + MLB.com (liste complète).
+    """
     scraper = MiseOJeuMLBScraper(headless=headless)
-    return asyncio.run(scraper.scrape())
+    matches = asyncio.run(scraper.scrape())
+    # Enrichir avec les matchs MLB.com manquants
+    matches = asyncio.run(_enrich_matches_with_mlb(matches))
+    return matches
