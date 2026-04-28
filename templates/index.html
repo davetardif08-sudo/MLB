@@ -1329,8 +1329,9 @@ function renderToday(data) {
   _combosData     = data.combos || [];
   _lowValueNight  = data.low_value_night || false;
 
-  // Remplir le carrousel des matchs (style NHL)
-  renderCarousel(allOpps);
+  // Remplir le carrousel avec TOUS les matchs du jour (carousel_matches inclut matchs sans cotes)
+  const carouselMatches = data.carousel_matches || allOpps;
+  renderCarousel(carouselMatches);
 
   renderMLBComboProposals(_combosData);
 

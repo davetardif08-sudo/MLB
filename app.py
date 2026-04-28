@@ -285,7 +285,40 @@ def api_data():
     _check_date_rollover()
     with _lock:
         if _cache["status"] == "ready" and _cache["data"]:
-            return jsonify(_cache["data"])
+            data = dict(_cache["data"])
+            # Ajouter tous les matchs du jour pour le carousel (même sans cotes)
+            # Le carousel affichera les matchs sans cotes en gris ou desactivés
+            try:
+                all_matches = _scrape_cached()
+                if all_matches:
+                    # Créer des opportunities pour les matchs sans cotes (pour le carousel)
+                    carousel_matches = []
+                    seen_keys = set()
+                    for opp in data.get("opportunities", []):
+                        key = (opp["home_team"], opp["away_team"])
+                        seen_keys.add(key)
+                        carousel_matches.append(opp)
+
+                    # Ajouter les matchs sans cotes
+                    for m in all_matches:
+                        key = (m.home_team, m.away_team)
+                        if key not in seen_keys:
+                            carousel_matches.append({
+                                "match": f"{m.away_team} @ {m.home_team}",
+                                "away_team": m.away_team,
+                                "home_team": m.home_team,
+                                "date": m.date,
+                                "time": m.time,
+                                "odds": None,
+                                "recommendation": "—",
+                                "event_url": m.event_url,
+                            })
+
+                    data["carousel_matches"] = carousel_matches
+            except Exception:
+                pass
+
+            return jsonify(data)
     return api_analyze()
 
 
