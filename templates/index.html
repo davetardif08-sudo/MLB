@@ -1025,6 +1025,12 @@ function renderCarousel(opps) {
     const time = opp.time ? opp.time.substring(0, 5) : '—';
     const odds = (opp.odds || 0).toFixed(2);
     const rec = opp.recommendation || '—';
+    const liveStatus = opp.live_status || '';        // Preview/Live/Final
+    const inning = opp.current_inning || '';
+    const awayScore = opp.away_score || 0;
+    const homeScore = opp.home_score || 0;
+    const isLive = liveStatus === 'Live';
+    const isFinal = liveStatus === 'Final';
 
     // Générer les logos
     const awayAbbrev = mlbTeamAbbrev(opp.away_team);
@@ -1036,9 +1042,20 @@ function renderCarousel(opps) {
       ? `<img src="https://a.espncdn.com/i/teamlogos/mlb/500/${homeAbbrev}.png" style="width:32px;height:32px;object-fit:contain;" alt="${homeAbbrev}" onerror="this.style.display='none'" loading="lazy">`
       : '';
 
+    // Affichage du score / état live
+    let topLine = time;
+    let bottomLine = (opp.odds || 0) > 0 ? `${odds} • ${rec}` : '—';
+    if (isLive) {
+      topLine = `<span style="color:#ef4444;font-weight:700">● LIVE</span> ${inning}`;
+      bottomLine = `<span style="color:#22c55e;font-weight:700">${awayScore} - ${homeScore}</span>`;
+    } else if (isFinal) {
+      topLine = `<span style="color:#8b949e">FINAL</span>`;
+      bottomLine = `<span style="font-weight:700">${awayScore} - ${homeScore}</span>`;
+    }
+
     return `
-      <div class="match-card" title="${match}\nOdds: ${odds}\n${rec}">
-        <div class="match-card-time">${time}</div>
+      <div class="match-card" title="${match}\n${rec}">
+        <div class="match-card-time">${topLine}</div>
         <div class="match-card-logos" style="display:flex;gap:4px;justify-content:center;align-items:center;">
           ${awayLogoHtml}
           <span style="font-size:10px;color:#6b7280;">vs</span>
@@ -1048,7 +1065,7 @@ function renderCarousel(opps) {
           ${opp.away_team.split('(')[0].trim().substring(0, 8)}<br>
           ${opp.home_team.split('(')[0].trim().substring(0, 8)}
         </div>
-        <div class="match-card-odds">${odds} • ${rec}</div>
+        <div class="match-card-odds">${bottomLine}</div>
       </div>
     `;
   }).join('');

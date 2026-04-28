@@ -2344,28 +2344,60 @@ def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
                 "is_info_only":   True,   # flag : ne pas miser
             })
 
-    # Carousel = TOUS les matchs du jour (avec ou sans cotes)
+    # Carousel = matchs d'AUJOURD'HUI uniquement (heure Montréal), avec scores live
+    from datetime import timedelta as _td
+    today_mtl = (datetime.utcnow() - _td(hours=4)).strftime('%Y-%m-%d')
+
+    # Index des données live par (home, away)
+    live_by_key = {}
+    for m in matches:
+        live_by_key[(m.home_team, m.away_team)] = {
+            "live_status":     getattr(m, 'live_status', ''),
+            "detailed_status": getattr(m, 'detailed_status', ''),
+            "away_score":      getattr(m, 'away_score', 0),
+            "home_score":      getattr(m, 'home_score', 0),
+            "current_inning":  getattr(m, 'current_inning', ''),
+        }
+
     carousel_list = []
     seen_carousel = set()
+    # 1) Opps d'aujourd'hui en premier
     for o in opp_list:
+        if o.get("date") and o["date"] != today_mtl:
+            continue
         ck = (o["home_team"], o["away_team"])
-        if ck not in seen_carousel:
-            seen_carousel.add(ck)
-            carousel_list.append(o)
+        if ck in seen_carousel:
+            continue
+        seen_carousel.add(ck)
+        live = live_by_key.get(ck, {})
+        carousel_list.append({**o, **live})
+
+    # 2) Matchs sans cotes (info-only) d'aujourd'hui
     for m in matches:
+        if m.date != today_mtl:
+            continue
         ck = (m.home_team, m.away_team)
-        if ck not in seen_carousel:
-            seen_carousel.add(ck)
-            carousel_list.append({
-                "match":          f"{m.away_team} @ {m.home_team}",
-                "away_team":      m.away_team,
-                "home_team":      m.home_team,
-                "date":           m.date,
-                "time":           m.time,
-                "odds":           0,
-                "recommendation": "—",
-                "event_url":      m.event_url,
-            })
+        if ck in seen_carousel:
+            continue
+        seen_carousel.add(ck)
+        carousel_list.append({
+            "match":           f"{m.away_team} @ {m.home_team}",
+            "away_team":       m.away_team,
+            "home_team":       m.home_team,
+            "date":            m.date,
+            "time":            m.time,
+            "odds":            0,
+            "recommendation":  "—",
+            "event_url":       m.event_url,
+            "live_status":     getattr(m, 'live_status', ''),
+            "detailed_status": getattr(m, 'detailed_status', ''),
+            "away_score":      getattr(m, 'away_score', 0),
+            "home_score":      getattr(m, 'home_score', 0),
+            "current_inning":  getattr(m, 'current_inning', ''),
+        })
+
+    # Trier par heure de match (chronologique)
+    carousel_list.sort(key=lambda x: (x.get("time") or "99:99"))
 
     return {
         "opportunities":      opp_list,

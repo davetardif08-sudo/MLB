@@ -53,6 +53,12 @@ class Match:
     away_pitcher: str = ""
     event_url: str = ""
     bet_groups: list['BetGroup'] = field(default_factory=list)
+    # Live game state (depuis MLB.com)
+    live_status: str = ""        # "Preview" | "Live" | "Final"
+    detailed_status: str = ""    # "Scheduled", "In Progress", "Final", "Postponed", etc.
+    away_score: int = 0
+    home_score: int = 0
+    current_inning: str = ""     # ex: "Top 5", "Bot 7", "Final"
 
 
 # --- Configuration -----------------------------------------------------------
@@ -472,38 +478,77 @@ class MiseOJeuMLBScraper:
 
 def _get_mlb_com_matches() -> dict:
     """
-    Récupère la liste officielle des matchs du jour depuis MLB.com.
-    Retourne un dict: {(away_name, home_name): {time, status, ...}}
+    Récupère la liste officielle des matchs du jour (heure Montréal) depuis MLB.com,
+    avec scores en direct via hydrate=linescore.
+    Retourne un dict: {(away_name, home_name): {time, status, scores, ...}}
     """
     try:
-        today = datetime.now().strftime('%Y-%m-%d')
-        url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}"
+        # "Aujourd'hui" en heure de Montréal (UTC-4 EDT en avril/oct, UTC-5 EST l'hiver)
+        # On utilise UTC-4 par défaut (saison MLB = avril-octobre = EDT)
+        montreal_now = datetime.utcnow() - timedelta(hours=4)
+        today_mtl = montreal_now.strftime('%Y-%m-%d')
+
+        # Récupérer 2 jours pour gérer les fuseaux (jeux ET tard = lendemain UTC)
+        # mais on filtrera ensuite sur la date locale Montréal
+        url = (f"https://statsapi.mlb.com/api/v1/schedule"
+               f"?sportId=1&startDate={today_mtl}&endDate={today_mtl}"
+               f"&hydrate=linescore,team")
         r = _requests_mod.get(url, timeout=15)
         r.raise_for_status()
         data = r.json()
 
         matches_map = {}
-        games = data.get('dates', [{}])[0].get('games', [])
+        for date_block in data.get('dates', []):
+            for g in date_block.get('games', []):
+                away_name = g.get('teams', {}).get('away', {}).get('team', {}).get('name', '')
+                home_name = g.get('teams', {}).get('home', {}).get('team', {}).get('name', '')
+                game_dt_iso = g.get('gameDate', '')  # ISO UTC
 
-        for g in games:
-            away_name = g.get('teams', {}).get('away', {}).get('team', {}).get('name', '')
-            home_name = g.get('teams', {}).get('home', {}).get('team', {}).get('name', '')
-            game_time = g.get('gameDateTime', '')[:16]  # ISO format
-            status = g.get('status', {}).get('abstractGameState', '')
+                # Filtrer : ne garder que les matchs dont la date LOCALE Montréal == aujourd'hui
+                try:
+                    game_dt_utc = datetime.fromisoformat(game_dt_iso.replace('Z', '+00:00'))
+                    game_dt_mtl = game_dt_utc.replace(tzinfo=None) - timedelta(hours=4)
+                    if game_dt_mtl.strftime('%Y-%m-%d') != today_mtl:
+                        continue
+                except Exception:
+                    continue
 
-            if away_name and home_name:
-                # Normaliser les noms pour matcher avec Loto-Québec
-                away_norm = _normalize_team_name_mlb(away_name)
-                home_norm = _normalize_team_name_mlb(home_name)
-                key = (away_norm, home_norm)
-                matches_map[key] = {
-                    'time': game_time,
-                    'status': status,
-                    'mlb_away': away_name,
-                    'mlb_home': home_name,
-                }
+                status_obj = g.get('status', {})
+                abstract_state = status_obj.get('abstractGameState', '')  # Preview/Live/Final
+                detailed_state = status_obj.get('detailedState', '')
 
-        print(f"     MLB.com: {len(matches_map)} matchs trouvés")
+                # Extraire scores via linescore
+                linescore = g.get('linescore', {}) or {}
+                away_runs = linescore.get('teams', {}).get('away', {}).get('runs', 0) or 0
+                home_runs = linescore.get('teams', {}).get('home', {}).get('runs', 0) or 0
+                inning = linescore.get('currentInning', 0) or 0
+                inning_state = linescore.get('inningState', '')  # Top/Middle/Bottom/End
+
+                # Texte d'état
+                if abstract_state == 'Live':
+                    inning_short = {'Top': 'Haut', 'Bottom': 'Bas', 'Middle': 'Mil', 'End': 'Fin'}.get(inning_state, inning_state)
+                    current_inning_str = f"{inning_short} {inning}" if inning else 'En cours'
+                elif abstract_state == 'Final':
+                    current_inning_str = 'Final'
+                else:
+                    current_inning_str = ''
+
+                if away_name and home_name:
+                    away_norm = _normalize_team_name_mlb(away_name)
+                    home_norm = _normalize_team_name_mlb(home_name)
+                    key = (away_norm, home_norm)
+                    matches_map[key] = {
+                        'time': game_dt_iso[:16],
+                        'status': abstract_state,
+                        'detailed_status': detailed_state,
+                        'away_score': int(away_runs),
+                        'home_score': int(home_runs),
+                        'current_inning': current_inning_str,
+                        'mlb_away': away_name,
+                        'mlb_home': home_name,
+                    }
+
+        print(f"     MLB.com (Montréal {today_mtl}): {len(matches_map)} matchs aujourd'hui")
         return matches_map
     except Exception as e:
         print(f"  >> Erreur MLB.com: {e}")
@@ -632,9 +677,15 @@ def scrape_sync(headless: bool = True) -> list[Match]:
 
         for key, mlb_info in mlb_matches_map.items():
             away_team, home_team = key
-            # Si on a des cotes Loto-Québec pour ce match, on les utilise
+            # Si on a des cotes Loto-Québec pour ce match, on les enrichit avec les scores live
             if key in odds_index:
-                final_matches.append(odds_index[key])
+                m = odds_index[key]
+                m.live_status     = mlb_info.get('status', '')
+                m.detailed_status = mlb_info.get('detailed_status', '')
+                m.away_score      = mlb_info.get('away_score', 0)
+                m.home_score      = mlb_info.get('home_score', 0)
+                m.current_inning  = mlb_info.get('current_inning', '')
+                final_matches.append(m)
                 continue
 
             # Sinon, créer un match "info only" pour le carousel
@@ -656,6 +707,11 @@ def scrape_sync(headless: bool = True) -> list[Match]:
                 time=time_str,
                 event_id=f"mlb_{away_team}_{home_team}",
                 event_url="https://mlb.com",
+                live_status=mlb_info.get('status', ''),
+                detailed_status=mlb_info.get('detailed_status', ''),
+                away_score=mlb_info.get('away_score', 0),
+                home_score=mlb_info.get('home_score', 0),
+                current_inning=mlb_info.get('current_inning', ''),
             ))
 
         print(f"[scraper] === Total: {len(final_matches)} matchs "
