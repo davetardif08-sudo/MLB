@@ -595,10 +595,73 @@ async def _enrich_matches_with_mlb(matches: list[Match]) -> list[Match]:
 def scrape_sync(headless: bool = True) -> list[Match]:
     """
     Point d'entrée synchrone.
-    Combine Loto-Québec (cotes) + MLB.com (liste complète).
+    PRIMARY: MLB.com (toujours fiable, liste officielle des matchs du jour).
+    SECONDARY: Loto-Québec (cotes), enrichit les matchs MLB.com quand disponibles.
+
+    Garantit qu'on retourne TOUJOURS la liste des matchs du jour, même si
+    Loto-Québec est vide / inaccessible / géo-bloqué (ex: sur Railway).
     """
-    scraper = MiseOJeuMLBScraper(headless=headless)
-    matches = asyncio.run(scraper.scrape())
-    # Enrichir avec les matchs MLB.com manquants
-    matches = asyncio.run(_enrich_matches_with_mlb(matches))
-    return matches
+    print("[scraper] === Démarrage scrape MLB ===")
+
+    # 1) MLB.com en premier (source primaire, toujours fiable)
+    print("[scraper] 1/2 — MLB.com (source primaire)...")
+    mlb_matches_map = _get_mlb_com_matches()
+    print(f"[scraper]      MLB.com: {len(mlb_matches_map)} matchs")
+
+    # 2) Loto-Québec en secondaire (cotes seulement, peut échouer)
+    print("[scraper] 2/2 — Loto-Québec (cotes)...")
+    odds_matches = []
+    try:
+        scraper = MiseOJeuMLBScraper(headless=headless)
+        odds_matches = asyncio.run(scraper.scrape())
+        print(f"[scraper]      Loto-Québec: {len(odds_matches)} matchs avec cotes")
+    except Exception as e:
+        print(f"[scraper]      Loto-Québec ERREUR: {type(e).__name__}: {e}")
+        odds_matches = []
+
+    # 3) Construire la liste finale : MLB.com base + cotes Loto-Q quand disponibles
+    if not mlb_matches_map and not odds_matches:
+        print("[scraper] AUCUNE source disponible — retour liste vide")
+        return []
+
+    # Si MLB.com a fonctionné, on l'utilise comme base
+    if mlb_matches_map:
+        # Indexer les matchs Loto-Québec par (away, home) pour merger les cotes
+        odds_index = {(m.away_team, m.home_team): m for m in odds_matches}
+        final_matches = []
+
+        for key, mlb_info in mlb_matches_map.items():
+            away_team, home_team = key
+            # Si on a des cotes Loto-Québec pour ce match, on les utilise
+            if key in odds_index:
+                final_matches.append(odds_index[key])
+                continue
+
+            # Sinon, créer un match "info only" pour le carousel
+            try:
+                dt = datetime.fromisoformat(mlb_info['time'].replace('Z', '+00:00'))
+                local = dt - timedelta(hours=4)
+                date_str = local.strftime('%Y-%m-%d')
+                time_str = local.strftime('%H:%M')
+            except Exception:
+                date_str = datetime.now().strftime('%Y-%m-%d')
+                time_str = ''
+
+            final_matches.append(Match(
+                sport="baseball",
+                league="MLB",
+                home_team=home_team,
+                away_team=away_team,
+                date=date_str,
+                time=time_str,
+                event_id=f"mlb_{away_team}_{home_team}",
+                event_url="https://mlb.com",
+            ))
+
+        print(f"[scraper] === Total: {len(final_matches)} matchs "
+              f"({len(odds_matches)} avec cotes, {len(final_matches) - len(odds_matches)} sans cotes) ===")
+        return final_matches
+
+    # Fallback: MLB.com a échoué mais Loto-Québec a fonctionné
+    print(f"[scraper] === Fallback Loto-Québec seul: {len(odds_matches)} matchs ===")
+    return odds_matches

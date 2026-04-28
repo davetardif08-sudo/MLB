@@ -137,13 +137,42 @@ def _start_analysis_thread(bankroll, kelly_frac, max_nightly, top_n, mode="stand
         try:
             matches = _scrape_cached()
             if not matches:
-                raise ValueError("Aucun match MLB trouvé sur Mise-O-Jeu")
+                # Aucune source disponible — cache vide mais valide pour ne pas bloquer le dashboard
+                print("[app] Aucun match disponible (MLB.com et Loto-Québec vides)")
+                empty_payload = _build_payload([], [], bankroll, kelly_frac, max_nightly,
+                                               all_picks=[], mode=mode)
+                empty_payload["carousel_matches"] = []
+                with _lock:
+                    _cache["status"]    = "ready"
+                    _cache["data"]      = empty_payload
+                    _cache["timestamp"] = datetime.now().strftime("%H:%M:%S")
+                    _cache["date"]      = datetime.now().strftime("%Y-%m-%d")
+                return
+
+            # Filtrer les matchs avec cotes pour l'analyse (les autres iront au carousel)
+            matches_with_odds = [m for m in matches if m.bet_groups]
+            print(f"[app] {len(matches)} matchs total, {len(matches_with_odds)} avec cotes pour analyse")
+
+            if not matches_with_odds:
+                # Pas de cotes disponibles — afficher seulement le carousel
+                print("[app] Aucune cote disponible — affichage carousel uniquement")
+                empty_payload = _build_payload([], matches, bankroll, kelly_frac, max_nightly,
+                                               all_picks=[], mode=mode)
+                with _lock:
+                    _cache["status"]    = "ready"
+                    _cache["data"]      = empty_payload
+                    _cache["timestamp"] = datetime.now().strftime("%H:%M:%S")
+                    _cache["date"]      = datetime.now().strftime("%Y-%m-%d")
+                return
+
+            # Pour l'analyse, on n'utilise que les matchs avec cotes
+            matches_for_analysis = matches_with_odds
 
             from analyzer import OddsAnalyzer
             from predictions import record_opportunity
 
             analyzer = OddsAnalyzer()
-            analyzed = analyzer.analyze_matches(matches)
+            analyzed = analyzer.analyze_matches(matches_for_analysis)
 
             # ── Générer et enregistrer STANDARD + CONSERVATEUR en parallèle ──
             all_modes_data = {}
