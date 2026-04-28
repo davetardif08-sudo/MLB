@@ -314,9 +314,11 @@ def _parse_match_page_text(text: str, event_id: str, event_url: str,
 class MiseOJeuMLBScraper:
     def __init__(self, headless: bool = True):
         self.headless = headless
+        # URLs alternatives (fallback si une URL retourne 0 matchs)
+        self.backup_list_url = "https://miseojeuplus.espacejeux.com/sports/fr/"
 
     async def scrape(self) -> list[Match]:
-        """Scrape les événements MLB de Mise-O-Jeu Loto-Québec."""
+        """Scrape les événements MLB de Mise-O-Jeu Loto-Québec (+ fallback espacejeux)."""
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=self.headless,
@@ -369,7 +371,29 @@ class MiseOJeuMLBScraper:
                 return result;
             }''')
 
-            print(f"     {len(list_data)} matchs trouvés sur la liste")
+            print(f"     {len(list_data)} matchs trouvés sur la liste Loto-Québec")
+
+            # Si aucun match sur lotoquebec.com, essayer espacejeux.com en fallback
+            if not list_data and self.backup_list_url != LIST_URL:
+                print(f"  >> Fallback vers {self.backup_list_url}")
+                try:
+                    await page.goto(self.backup_list_url, wait_until='domcontentloaded', timeout=35000)
+                    await asyncio.sleep(2)
+                    list_data = await page.evaluate(r'''() => {
+                        const all = document.querySelectorAll('a[href*="/evenement/"][href*="baseball"]');
+                        const seen = new Set();
+                        const result = [];
+                        for (const a of all) {
+                            const m = a.href.match(/\/evenement\/(\d+)/);
+                            if (!m || seen.has(m[1])) continue;
+                            seen.add(m[1]);
+                            result.push({id: m[1], href: a.href, context: (a.parentElement?.innerText || '')});
+                        }
+                        return result;
+                    }''')
+                    print(f"     {len(list_data)} matchs trouvés sur espacejeux (fallback)")
+                except Exception as e:
+                    print(f"  >> Fallback échoué: {e}")
 
             await page.close()
 
