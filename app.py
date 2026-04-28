@@ -2344,9 +2344,33 @@ def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
                 "is_info_only":   True,   # flag : ne pas miser
             })
 
+    # Carousel = TOUS les matchs du jour (avec ou sans cotes)
+    carousel_list = []
+    seen_carousel = set()
+    for o in opp_list:
+        ck = (o["home_team"], o["away_team"])
+        if ck not in seen_carousel:
+            seen_carousel.add(ck)
+            carousel_list.append(o)
+    for m in matches:
+        ck = (m.home_team, m.away_team)
+        if ck not in seen_carousel:
+            seen_carousel.add(ck)
+            carousel_list.append({
+                "match":          f"{m.away_team} @ {m.home_team}",
+                "away_team":      m.away_team,
+                "home_team":      m.home_team,
+                "date":           m.date,
+                "time":           m.time,
+                "odds":           0,
+                "recommendation": "—",
+                "event_url":      m.event_url,
+            })
+
     return {
         "opportunities":      opp_list,
         "all_predictions":    opp_list + info_list,  # tous les picks : paris + prédictions info-only
+        "carousel_matches":   carousel_list,
         "combos":             combos,
         "total_matches":      len(matches),
         "total_picks":        len(opp_list),

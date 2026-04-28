@@ -1002,7 +1002,11 @@ let _v2Chart         = null;
 // ── Carrousel des matchs (NHL style) ──────────────────────────────
 function renderCarousel(opps) {
   const carousel = document.getElementById('carousel-content');
-  if (!carousel || !opps || opps.length === 0) return;
+  if (!carousel) return;
+  if (!opps || opps.length === 0) {
+    carousel.innerHTML = '<div style="color:#8b949e; padding:12px; text-align:center; width:100%">Aucun match aujourd\'hui</div>';
+    return;
+  }
 
   // Dédupliquer par match (home_team + away_team) — prendre le premier de chaque match
   const seenMatches = new Set();
