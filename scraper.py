@@ -408,7 +408,7 @@ class MiseOJeuMLBScraper:
                 return []
 
             # Parser les contextes pour récupérer équipes + heure
-            today = datetime.now().strftime('%Y-%m-%d')
+            today = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
             list_info = {}
             for item in list_data:
                 eid = item['id']
@@ -618,7 +618,7 @@ async def _enrich_matches_with_mlb(matches: list[Match]) -> list[Match]:
                 date_str = local.strftime('%Y-%m-%d')
                 time_str = local.strftime('%H:%M')
             except Exception:
-                date_str = datetime.now().strftime('%Y-%m-%d')
+                date_str = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
                 time_str = ''
 
             # Créer un match sans cotes (pour le carousel uniquement)
@@ -695,7 +695,7 @@ def scrape_sync(headless: bool = True) -> list[Match]:
                 date_str = local.strftime('%Y-%m-%d')
                 time_str = local.strftime('%H:%M')
             except Exception:
-                date_str = datetime.now().strftime('%Y-%m-%d')
+                date_str = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
                 time_str = ''
 
             final_matches.append(Match(

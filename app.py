@@ -6,8 +6,21 @@ import json
 import os
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+
+# ─── Fuseau horaire Montréal ──────────────────────────────────────────────────
+# Railway tourne en UTC. La saison MLB = avril–octobre = EDT (UTC-4).
+# On fixe UTC-4 pour tout l'app (hors-saison peu importe, MLB pas actif).
+_MTL_OFFSET = timedelta(hours=4)
+
+def _now_mtl() -> datetime:
+    """Retourne l'heure actuelle en heure de Montréal (EDT = UTC-4)."""
+    return datetime.utcnow() - _MTL_OFFSET
+
+def _today_mtl() -> str:
+    """Retourne la date d'aujourd'hui en format YYYY-MM-DD, heure Montréal."""
+    return _now_mtl().strftime("%Y-%m-%d")
 from flask import Flask, render_template, jsonify, request, redirect, url_for
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 
@@ -61,7 +74,7 @@ _SNAPSHOTS_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 
 def _check_date_rollover():
     """Invalide le cache si on a changé de jour."""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _today_mtl()
     with _lock:
         cached_date = _cache.get("date")
         if cached_date and cached_date != today and _cache["status"] == "ready":
@@ -145,8 +158,8 @@ def _start_analysis_thread(bankroll, kelly_frac, max_nightly, top_n, mode="stand
                 with _lock:
                     _cache["status"]    = "ready"
                     _cache["data"]      = empty_payload
-                    _cache["timestamp"] = datetime.now().strftime("%H:%M:%S")
-                    _cache["date"]      = datetime.now().strftime("%Y-%m-%d")
+                    _cache["timestamp"] = _now_mtl().strftime("%H:%M:%S")
+                    _cache["date"]      = _today_mtl()
                 return
 
             # Filtrer les matchs avec cotes pour l'analyse (les autres iront au carousel)
@@ -161,8 +174,8 @@ def _start_analysis_thread(bankroll, kelly_frac, max_nightly, top_n, mode="stand
                 with _lock:
                     _cache["status"]    = "ready"
                     _cache["data"]      = empty_payload
-                    _cache["timestamp"] = datetime.now().strftime("%H:%M:%S")
-                    _cache["date"]      = datetime.now().strftime("%Y-%m-%d")
+                    _cache["timestamp"] = _now_mtl().strftime("%H:%M:%S")
+                    _cache["date"]      = _today_mtl()
                 return
 
             # Pour l'analyse, on n'utilise que les matchs avec cotes
@@ -238,8 +251,8 @@ def _start_analysis_thread(bankroll, kelly_frac, max_nightly, top_n, mode="stand
             with _lock:
                 _cache["status"]    = "ready"
                 _cache["data"]      = payload
-                _cache["timestamp"] = datetime.now().strftime("%H:%M:%S")
-                _cache["date"]      = datetime.now().strftime("%Y-%m-%d")
+                _cache["timestamp"] = _now_mtl().strftime("%H:%M:%S")
+                _cache["date"]      = _today_mtl()
 
         except Exception as e:
             print(f"[app] Erreur analyse: {e}")
@@ -454,16 +467,16 @@ def api_save_snapshot():
             "is_bet":         is_bet,
         }
 
-    today    = datetime.now().strftime("%Y-%m-%d")
+    today    = _today_mtl()
 
     # Dédupliquer : all_opps contient déjà les picks, éviter les doublons
     bet_keys = {p.get("key", "") for p in picks}
     extra_opps = [p for p in all_opps if p.get("key", "") not in bet_keys]
 
     snapshot = {
-        "saved_at":        datetime.now().isoformat(),
+        "saved_at":        _now_mtl().isoformat(),
         "date":            today,
-        "time":            datetime.now().strftime("%H:%M"),
+        "time":            _now_mtl().strftime("%H:%M"),
         "low_value_night": low_value_night,
         "picks":           [_clean(p, True)  for p in picks] +
                            [_clean(p, False) for p in extra_opps],
@@ -528,7 +541,7 @@ def _resolve_combos(combos_raw: list, mlb_results: dict) -> list:
 def api_yesterday():
     """Résultats des paris d'hier depuis le snapshot + résultats MLB via statsapi."""
     from datetime import date, timedelta
-    today = date.today().isoformat()
+    today = _today_mtl()
 
     # Chercher le snapshot le plus récent antérieur à aujourd'hui
     snap = None
@@ -728,7 +741,7 @@ def _resolve_pick(pick: dict, mlb_results: dict) -> str:
 def api_stats():
     """Agrège tous les snapshots passés pour produire les statistiques de performance."""
     from datetime import date
-    today = date.today().isoformat()
+    today = _today_mtl()
 
     if not os.path.isdir(_SNAPSHOTS_DIR):
         return jsonify({"error": "Aucun snapshot disponible"}), 404
@@ -1110,8 +1123,8 @@ def api_analyze_v2():
         return jsonify({
             "picks":     out,
             "total":     len(out),
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "date":      datetime.now().strftime("%Y-%m-%d"),
+            "timestamp": _now_mtl().strftime("%H:%M:%S"),
+            "date":      _today_mtl(),
             "system":    "v2",
         })
 
@@ -1125,7 +1138,7 @@ def api_stats_v2():
     """Statistiques historiques du système V2 — lit predictions.json directement."""
     from datetime import date
     from pathlib import Path
-    today  = date.today().isoformat()
+    today  = _today_mtl()
     budget = float(request.args.get('budget', 10))
 
     predictions_file = Path(__file__).parent / "predictions.json"
@@ -1251,7 +1264,7 @@ def api_stats_v2():
 @app.route('/api/mlb-combo-today')
 def api_mlb_combo_today():
     """Retourne les combos du snapshot sauvegardé aujourd'hui (figés)."""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _today_mtl()
     daily_path = os.path.join(_SNAPSHOTS_DIR, f"{today}.json")
     if not os.path.exists(daily_path):
         return jsonify({"combos": [], "saved_at": None})
@@ -1269,7 +1282,7 @@ def api_mlb_combo_today():
 @app.route('/api/mlb-combo-history')
 def api_mlb_combo_history():
     """Historique des Combos MLB résolus depuis les snapshots passés."""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _today_mtl()
 
     if not os.path.isdir(_SNAPSHOTS_DIR):
         return jsonify({"combos": [], "summary": {}})
@@ -1375,7 +1388,7 @@ def _resolve_live(pick: dict, home_score: int, away_score: int,
 def api_mlb_live():
     """Snapshot du jour + résultats/scores MLB en temps réel via statsapi."""
     from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
-    today = _date.today().isoformat()
+    today = __today_mtl()
 
     # Charger le snapshot du jour
     snap = None
@@ -1530,7 +1543,7 @@ def api_mlb_live():
         "losses":     losses,
         "pending":    pending,
         "net":        round(net, 2),
-        "fetched_at": _datetime.now().strftime("%H:%M:%S"),
+        "fetched_at": __now_mtl().strftime("%H:%M:%S"),
     })
 
 
@@ -1554,7 +1567,7 @@ def api_calibrate():
     Requiert au minimum 10 picks résolus avec factor_scores.
     """
     from datetime import date
-    today = date.today().isoformat()
+    today = _today_mtl()
 
     if not os.path.isdir(_SNAPSHOTS_DIR):
         return jsonify({"error": "Aucun snapshot disponible"}), 404
@@ -1719,7 +1732,7 @@ def api_auto_calibrate_stat_weight():
     Lit les predictions.json, calcule le biais bin par bin, ajuste weights.json.
     """
     from datetime import date
-    today = date.today().isoformat()
+    today = _today_mtl()
 
     if not os.path.isdir(_SNAPSHOTS_DIR):
         return jsonify({"ok": False, "reason": "Aucun snapshot disponible"}), 404
@@ -2029,7 +2042,7 @@ def api_compare_systems():
     if not os.path.isdir(snap_dir):
         return jsonify({"days": [], "summary": {}, "picks": []})
 
-    today      = datetime.now().strftime("%Y-%m-%d")
+    today      = _today_mtl()
     all_picks  = []
     days_out   = []
     cum        = {k: 0.0 for k in "ABCDEFG"}
@@ -2416,8 +2429,8 @@ def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
         "raw_kelly_total":    round(total_kelly, 2),
         "kelly_confidence":   round(confidence, 2),
         "low_value_night":    low_value,
-        "timestamp":          datetime.now().strftime("%H:%M:%S"),
-        "date":               datetime.now().strftime("%Y-%m-%d"),
+        "timestamp":          _now_mtl().strftime("%H:%M:%S"),
+        "date":               _today_mtl(),
         "mode":               mode,
     }
 

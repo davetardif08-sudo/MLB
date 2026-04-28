@@ -13,6 +13,12 @@ Adapté de miseojeu-analyzer/predictions.py pour la MLB.
 import json
 import time
 from datetime import date, datetime, timedelta
+
+# Railway tourne UTC — utiliser heure Montréal (EDT = UTC-4)
+_MTL_OFFSET = timedelta(hours=4)
+def _today_mtl() -> str:
+    return (datetime.utcnow() - _MTL_OFFSET).strftime('%Y-%m-%d')
+
 from pathlib import Path
 
 PREDICTIONS_FILE = Path(__file__).parent / "predictions.json"
@@ -104,7 +110,7 @@ def record_opportunity(pick: dict):
         "analysis_mode":   pick.get("analysis_mode", "standard"),
         "system_version":  pick.get("system_version", ""),
         "outcome":         None,    # "win" | "loss" | "push"
-        "saved_at":        datetime.now().isoformat(),
+        "saved_at":        (datetime.utcnow() - _MTL_OFFSET).isoformat(),
     }
     records.append(record)
     _save(records)
@@ -140,7 +146,7 @@ def update_outcomes(days_back: int = 5):
     for r in pending:
         by_date[r["date"]].append(r)
 
-    today = date.today()
+    today_str = _today_mtl(); today = date.fromisoformat(today_str)
     cutoff = (today - timedelta(days=days_back)).isoformat()
 
     for game_date, date_records in by_date.items():
