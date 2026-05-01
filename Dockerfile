@@ -39,8 +39,8 @@ RUN python -m playwright install-deps chromium
 COPY . .
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8080
 
-# Run with Gunicorn (production WSGI server)
-# Use PORT env var from Railway, default to 8000
-CMD sh -c 'gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 300 --access-logfile - app:app'
+# Run with Gunicorn
+# PORT is set by the platform (Fly.io = 8080, Railway = dynamic)
+CMD sh -c 'gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 300 --access-logfile - --error-logfile - app:app'
