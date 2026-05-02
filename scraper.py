@@ -98,16 +98,28 @@ _API_SESSION.headers.update({
 
 # Marchés à GARDER (titre exact ou contenu)
 MARKET_KEYWORDS_KEEP = [
-    "gagnant du match",                    # Moneyline + Run Line
-    "total de points dans le match",       # Over/Under runs
-    "total de coups sûrs dans le match",   # Hits over/under
+    "gagnant du match",          # Moneyline
+    "gagnant",                   # Moneyline alternatif
+    "total de points",           # Over/Under runs (incluant "plus/moins X.X")
+    "total de coups",            # Hits over/under
+    "écart",                     # Run line (handicap)
+    "handicap",                  # Run line alternatif
 ]
 
 # Marchés à EXCLURE (manches isolées, props joueurs)
 MARKET_KEYWORDS_EXCLUDE = [
     "première manche",
     "1re manche",
+    "2e manche",
+    "3e manche",
+    "4e manche",
+    "5e manche",
+    "6e manche",
+    "7e manche",
+    "8e manche",
+    "9e manche",
     "5 premières manches",
+    "pair/impair",          # éviter les paris pair/impair
     "retraits au bâton",
     "total de buts",        # props joueurs (home runs / total bases)
     "circuit",
@@ -619,36 +631,27 @@ def _fetch_one_event_api(event_id: str, url_map: dict) -> Optional[Match]:
 
 
 def _extract_odds_value(outcome: dict) -> float:
-    """Extrait la cote décimale d'un outcome, en cherchant dans plusieurs champs."""
-    # Essayer plusieurs structures possibles
-    for key in ("price", "currentPrice", "odds", "decimalOdds", "priceDecimal"):
-        v = outcome.get(key)
-        if isinstance(v, dict):
-            for sub in ("decimal", "decimalOdds", "value", "amount"):
-                if sub in v:
+    """Extrait la cote décimale d'un outcome (Mise-O-Jeu utilise outcome.prices[0].decimal)."""
+    prices = outcome.get("prices", [])
+    if isinstance(prices, list) and prices:
+        # Préférer LP (Live Price) si disponible, sinon premier
+        for p in prices:
+            if isinstance(p, dict) and p.get("priceType") == "LP":
+                v = p.get("decimal")
+                if v:
                     try:
-                        return float(v[sub])
+                        return float(v)
                     except (ValueError, TypeError):
                         pass
-        elif v is not None:
-            try:
-                f = float(v)
-                if 1.0 < f < 100.0:
-                    return f
-            except (ValueError, TypeError):
-                pass
-
-    # Chercher dans priceHistory
-    hist = outcome.get("priceHistory", [])
-    if hist and isinstance(hist, list):
-        last = hist[-1]
-        if isinstance(last, dict):
-            for sub in ("decimal", "decimalOdds", "value", "price"):
-                if sub in last:
-                    try:
-                        return float(last[sub])
-                    except (ValueError, TypeError):
-                        pass
+        # Fallback : premier prix
+        first = prices[0]
+        if isinstance(first, dict):
+            v = first.get("decimal")
+            if v:
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    pass
     return 0.0
 
 
