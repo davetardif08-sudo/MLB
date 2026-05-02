@@ -71,12 +71,29 @@ MATCH_URL_TEMPLATE = f"{BASE_URL}/fr/offre-de-paris/baseball/mlb/matchs?idEve={{
 # --- API REST (contourne géolocalisation comme dans app NHL) ---
 # L'API content-service n'est PAS géo-bloquée contrairement au site HTML
 API_BASE = "https://content.mojp-sgdigital-jel.com/content-service/api/v1/q"
-BASEBALL_TAG_ID = "10"  # Tag ID pour baseball/MLB (confirmé par idAct=10)
+API_PARAMS = (
+    "includeChildMarkets=true"
+    "&includeCollections=true"
+    "&includePriorityCollectionChildMarkets=true"
+    "&includePriceHistory=false"
+    "&includeCommentary=false"
+    "&includeIncidents=false"
+    "&includeRace=false"
+    "&includeMedia=false"
+    "&includePools=false"
+    "&includeNonFixedOdds=false"
+    "&lang=fr-CA"
+    "&channel=I"
+)
+# Tag IDs côté Mise-O-Jeu pour identifier les compétitions
+# (À découvrir pour MLB - on essaiera plusieurs valeurs candidates)
+BASEBALL_TAG_IDS_CANDIDATES = ["8", "9", "10", "11", "608", "609", "610"]
 _API_SESSION = _requests_mod.Session()
 _API_SESSION.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer": BASE_URL,
-    "Origin": BASE_URL,
+    "Accept": "application/json",
+    "Referer": "https://miseojeuplus.espacejeux.com/",
+    "Origin": "https://miseojeuplus.espacejeux.com",
 })
 
 # Marchés à GARDER (titre exact ou contenu)
@@ -488,62 +505,184 @@ class MiseOJeuMLBScraper:
             await page.close()
 
 
-def _fetch_api_baseball_matches() -> list[dict]:
+def _fetch_event_ids_via_api() -> list[tuple[str, str]]:
     """
-    Récupère les matchs baseball via l'API REST Mise-O-Jeu (contourne géolocalisation).
-    Retourne une liste de dicts {eid, away_team, home_team, odds_list, ...}
-    Cette API n'est PAS géo-bloquée contrairement au site HTML.
+    Récupère la liste des matchs MLB via l'API event-list de Mise-O-Jeu.
+    Utilise les MÊMES paramètres que le scraper NHL pour contourner géo-blocage.
+    Retourne list[(event_id, event_url)].
     """
-    try:
-        today = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
-
-        # Étape 1 : récupérer la liste des événements baseball du jour
-        api_url = f"{API_BASE}/event-list?drilldownTagIds={BASEBALL_TAG_ID}&lang=fr"
-        print(f"  >> API event-list (baseball): {api_url}")
-        resp = _API_SESSION.get(api_url, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-
-        events = data.get("events", [])
-        print(f"     API: {len(events)} événements trouvés")
-
-        matches_data = []
-        for evt in events:
-            try:
-                eid = evt.get("eventId", "")
-                if not eid:
-                    continue
-
-                # Filtrer par date (aujourd'hui)
-                evt_date = evt.get("eventDate", "")[:10]
-                if evt_date != today:
-                    continue
-
-                # Extraire les équipes (format: [away, home])
-                participants = evt.get("participants", [])
-                if len(participants) < 2:
-                    continue
-
-                away = participants[0].get("name", "").strip()
-                home = participants[1].get("name", "").strip()
-
-                if away and home:
-                    matches_data.append({
-                        "eid": eid,
-                        "away_team": _normalize_team_name(away),
-                        "home_team": _normalize_team_name(home),
-                        "date": today,
-                        "raw_event": evt,
-                    })
-            except Exception as e:
-                # Ignorer les événements mal formés
+    # Essayer plusieurs tag IDs candidats pour le baseball
+    for tag_id in BASEBALL_TAG_IDS_CANDIDATES:
+        api_url = (
+            f"{API_BASE}/event-list"
+            f"?eventSortsIncluded=MTCH"
+            f"&includeChildMarkets=false"
+            f"&drilldownTagIds={tag_id}"
+            f"&lang=fr-CA&channel=I"
+        )
+        try:
+            resp = _API_SESSION.get(api_url, timeout=15)
+            if resp.status_code != 200:
+                print(f"  >> API event-list tag={tag_id}: HTTP {resp.status_code}")
+                continue
+            data = resp.json()
+            events = data.get("data", {}).get("events") or []
+            if not events:
                 continue
 
-        print(f"     API: {len(matches_data)} matchs baseball aujourd'hui")
-        return matches_data
+            # Vérifier que c'est bien du baseball (regarder le premier event)
+            first_evt = events[0]
+            sport_name = (first_evt.get("sportName", "") or
+                         first_evt.get("competition", {}).get("sportName", "") or "").lower()
+            comp_name = (first_evt.get("competitionName", "") or
+                        first_evt.get("competition", {}).get("name", "") or "").lower()
+            if "baseball" not in sport_name and "mlb" not in comp_name and "baseball" not in comp_name:
+                # Pas du baseball, essayer le tag ID suivant
+                print(f"  >> Tag ID {tag_id} = {sport_name}/{comp_name} (pas baseball)")
+                continue
+
+            result = []
+            for ev in events:
+                eid = str(ev.get("id", ""))
+                if not eid:
+                    continue
+                url = f"https://miseojeuplus.espacejeux.com/sports/fr/sportif/evenement/{eid}"
+                result.append((eid, url))
+            print(f"  >> API event-list (baseball, tag={tag_id}): {len(result)} matchs")
+            return result
+        except Exception as e:
+            print(f"  [!] API event-list tag={tag_id} erreur: {type(e).__name__}: {e}")
+            continue
+
+    print(f"  >> Aucun tag ID baseball valide trouvé")
+    return []
+
+
+def _fetch_one_event_api(event_id: str, url_map: dict) -> Optional[Match]:
+    """Récupère les cotes d'un événement via l'API events-by-ids."""
+    api_url = f"{API_BASE}/events-by-ids?eventIds={event_id}&{API_PARAMS}"
+    try:
+        resp = _API_SESSION.get(api_url, timeout=12)
+        resp.raise_for_status()
+        data = resp.json()
+        events_list = data.get("data", {}).get("events", [])
+        for ev in events_list:
+            match = _parse_event_api(ev)
+            if match:
+                match.event_url = url_map.get(match.event_id, "")
+                print(f"     API: {match.away_team} @ {match.home_team} - {len(match.bet_groups)} marchés")
+                return match
+        return None
     except Exception as e:
-        print(f"  >> Erreur API event-list: {type(e).__name__}: {e}")
+        print(f"    [!] Erreur event API {event_id}: {e}")
+        return None
+
+
+def _parse_event_api(ev: dict) -> Optional[Match]:
+    """Parse un événement API en objet Match avec ses cotes."""
+    try:
+        eid = str(ev.get("id", ""))
+        if not eid:
+            return None
+
+        # Extraire les équipes
+        participants = ev.get("participants", [])
+        if len(participants) < 2:
+            return None
+
+        # Convention Mise-O-Jeu : participant[0] = away, participant[1] = home
+        away_raw = participants[0].get("name", "").strip()
+        home_raw = participants[1].get("name", "").strip()
+        if not away_raw or not home_raw:
+            return None
+
+        # Date et heure
+        start_iso = ev.get("startTimeUtc") or ev.get("startTime", "")
+        try:
+            dt_utc = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
+            local = dt_utc.replace(tzinfo=None) - timedelta(hours=4)
+            date_str = local.strftime('%Y-%m-%d')
+            time_str = local.strftime('%H:%M')
+        except Exception:
+            date_str = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
+            time_str = ''
+
+        match = Match(
+            sport="baseball",
+            league="MLB",
+            home_team=_normalize_team_name(home_raw),
+            away_team=_normalize_team_name(away_raw),
+            date=date_str,
+            time=time_str,
+            event_id=eid,
+        )
+
+        # Extraire les marchés (markets)
+        markets = ev.get("markets", []) or []
+        for mkt in markets:
+            mkt_name = (mkt.get("name", "") or mkt.get("displayName", "")).strip()
+            if not mkt_name:
+                continue
+
+            # Filtrer les marchés intéressants
+            if not _should_keep_market(mkt_name):
+                continue
+
+            grp = BetGroup(bet_type=mkt_name)
+            for outcome in mkt.get("outcomes", []) or mkt.get("selections", []):
+                sel_name = (outcome.get("name", "") or outcome.get("displayName", "")).strip()
+                price = outcome.get("price", {})
+                # Le prix peut être un dict {decimal: 1.95} ou un float direct
+                if isinstance(price, dict):
+                    odds_val = price.get("decimal") or price.get("decimalOdds")
+                else:
+                    odds_val = price
+                try:
+                    odds_f = float(odds_val) if odds_val else 0
+                except (ValueError, TypeError):
+                    odds_f = 0
+                if odds_f > 1.0 and sel_name:
+                    sel_id = outcome.get("id", "") or outcome.get("selectionId", "")
+                    grp.selections.append(Selection(
+                        label=sel_name,
+                        odds=odds_f,
+                        prediction_id=str(sel_id),
+                    ))
+            if len(grp.selections) >= 2:
+                match.bet_groups.append(grp)
+
+        return match if match.bet_groups else None
+    except Exception as e:
+        print(f"    [!] Parse event erreur: {e}")
+        return None
+
+
+def _fetch_api_baseball_matches() -> list[Match]:
+    """
+    Récupère les matchs MLB via l'API REST Mise-O-Jeu (contourne géolocalisation).
+    Cette API utilise les mêmes paramètres que le scraper NHL.
+    """
+    event_pairs = _fetch_event_ids_via_api()
+    if not event_pairs:
         return []
+
+    url_map = {eid: url for eid, url in event_pairs}
+    event_ids = [eid for eid, _ in event_pairs]
+
+    matches = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(_fetch_one_event_api, eid, url_map): eid
+                   for eid in event_ids}
+        for future in as_completed(futures):
+            try:
+                m = future.result()
+                if m:
+                    matches.append(m)
+            except Exception as e:
+                print(f"    [!] Erreur fetch parallèle: {e}")
+
+    print(f"  >> API: {len(matches)} matchs avec cotes récupérés")
+    return matches
 
 
 def _get_mlb_com_matches() -> dict:
@@ -724,19 +863,15 @@ def scrape_sync(headless: bool = True) -> list[Match]:
     print(f"[scraper]      MLB.com: {len(mlb_matches_map)} matchs")
 
     # 2) Loto-Québec en secondaire (cotes)
-    # 2a) Essayer l'API REST en premier (NON géo-bloquée)
+    # 2a) Essayer l'API REST en premier (NON géo-bloquée comme app NHL)
     print("[scraper] 2/2 — Loto-Québec API (cotes)...")
-    odds_matches = []
-    api_matches = _fetch_api_baseball_matches()
-    if api_matches:
-        print(f"[scraper]      API: {len(api_matches)} matchs trouvés")
-        # TODO: Parser les cotes de l'API et créer des Match objects
-        # Pour l'instant, on continue avec Playwright comme fallback
-        odds_matches = []
+    odds_matches = _fetch_api_baseball_matches()
+    if odds_matches:
+        print(f"[scraper]      API: {len(odds_matches)} matchs avec cotes")
 
     # 2b) Fallback : Playwright si l'API ne donne rien
-    if not api_matches:
-        print("[scraper]      API vide/erreur — fallback Playwright...")
+    if not odds_matches:
+        print("[scraper]      API vide — fallback Playwright...")
         try:
             scraper = MiseOJeuMLBScraper(headless=headless)
             odds_matches = asyncio.run(scraper.scrape())
