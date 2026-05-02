@@ -86,15 +86,8 @@ API_PARAMS = (
     "&channel=I"
 )
 # Tag IDs côté Mise-O-Jeu pour identifier les compétitions
-# Hockey/NHL = 574, Basketball/NBA = 606. Le MLB est à découvrir.
-# On élargit la recherche et on inspecte le contenu retourné.
-BASEBALL_TAG_IDS_CANDIDATES = [
-    "1", "2", "3", "4", "5", "10",  # IDs bas
-    "100", "101", "102",
-    "500", "501", "502", "503", "510", "520", "530", "540", "550", "560", "570", "580", "590", "600",
-    "601", "602", "603", "604", "605", "608", "610", "612", "614", "616", "618", "620",
-    "650", "700", "750", "800", "900", "1000",
-]
+# Hockey/NHL = 574, Basketball/NBA = 606, Baseball/MLB = 4 (DÉCOUVERT!)
+BASEBALL_TAG_IDS_CANDIDATES = ["4"]
 _API_SESSION = _requests_mod.Session()
 _API_SESSION.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -576,6 +569,8 @@ def _fetch_event_ids_via_api() -> list[tuple[str, str]]:
     return []
 
 
+_DEBUG_LOGGED = [False]  # Log la structure d'UN seul event pour debug
+
 def _fetch_one_event_api(event_id: str, url_map: dict) -> Optional[Match]:
     """Récupère les cotes d'un événement via l'API events-by-ids."""
     api_url = f"{API_BASE}/events-by-ids?eventIds={event_id}&{API_PARAMS}"
@@ -584,6 +579,28 @@ def _fetch_one_event_api(event_id: str, url_map: dict) -> Optional[Match]:
         resp.raise_for_status()
         data = resp.json()
         events_list = data.get("data", {}).get("events", [])
+
+        # DEBUG: log la structure du premier event reçu
+        if events_list and not _DEBUG_LOGGED[0]:
+            _DEBUG_LOGGED[0] = True
+            ev0 = events_list[0]
+            top_keys = list(ev0.keys())[:25]
+            print(f"    [DEBUG] Event keys: {top_keys}")
+            # Inspecter participants
+            parts = ev0.get("participants", [])
+            print(f"    [DEBUG] Participants ({len(parts)}): {[p.get('name', '?') for p in parts[:3]]}")
+            # Inspecter markets
+            mkts = ev0.get("markets", [])
+            print(f"    [DEBUG] Markets count: {len(mkts)}")
+            if mkts:
+                m0 = mkts[0]
+                m_keys = list(m0.keys())[:15]
+                print(f"    [DEBUG] Market[0] keys: {m_keys}")
+                print(f"    [DEBUG] Market[0] name: {m0.get('name', '?')} / display: {m0.get('displayName', '?')}")
+                outs = m0.get("outcomes", []) or m0.get("selections", [])
+                if outs:
+                    print(f"    [DEBUG] Outcome[0]: {json.dumps(outs[0])[:200]}")
+
         for ev in events_list:
             match = _parse_event_api(ev)
             if match:
