@@ -86,8 +86,15 @@ API_PARAMS = (
     "&channel=I"
 )
 # Tag IDs côté Mise-O-Jeu pour identifier les compétitions
-# (À découvrir pour MLB - on essaiera plusieurs valeurs candidates)
-BASEBALL_TAG_IDS_CANDIDATES = ["8", "9", "10", "11", "608", "609", "610"]
+# Hockey/NHL = 574, Basketball/NBA = 606. Le MLB est à découvrir.
+# On élargit la recherche et on inspecte le contenu retourné.
+BASEBALL_TAG_IDS_CANDIDATES = [
+    "1", "2", "3", "4", "5", "10",  # IDs bas
+    "100", "101", "102",
+    "500", "501", "502", "503", "510", "520", "530", "540", "550", "560", "570", "580", "590", "600",
+    "601", "602", "603", "604", "605", "608", "610", "612", "614", "616", "618", "620",
+    "650", "700", "750", "800", "900", "1000",
+]
 _API_SESSION = _requests_mod.Session()
 _API_SESSION.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -530,16 +537,27 @@ def _fetch_event_ids_via_api() -> list[tuple[str, str]]:
             if not events:
                 continue
 
-            # Vérifier que c'est bien du baseball (regarder le premier event)
+            # Inspecter le premier event pour identifier le sport
             first_evt = events[0]
-            sport_name = (first_evt.get("sportName", "") or
-                         first_evt.get("competition", {}).get("sportName", "") or "").lower()
-            comp_name = (first_evt.get("competitionName", "") or
-                        first_evt.get("competition", {}).get("name", "") or "").lower()
-            if "baseball" not in sport_name and "mlb" not in comp_name and "baseball" not in comp_name:
-                # Pas du baseball, essayer le tag ID suivant
-                print(f"  >> Tag ID {tag_id} = {sport_name}/{comp_name} (pas baseball)")
+            # Chercher dans tous les champs possibles
+            blob = json.dumps(first_evt).lower()
+
+            # Log un échantillon pour debug (premier essai seulement)
+            if tag_id == BASEBALL_TAG_IDS_CANDIDATES[0]:
+                # Log les noms de champs disponibles dans le premier event
+                top_keys = list(first_evt.keys())[:20]
+                print(f"  >> Tag {tag_id} structure event: {top_keys}")
+
+            is_baseball = ("baseball" in blob or "mlb" in blob or
+                          "yankees" in blob or "dodgers" in blob or "red sox" in blob)
+            if not is_baseball:
+                # Extraire un nom utile pour le log
+                name_hint = (first_evt.get("name") or first_evt.get("displayName") or
+                            first_evt.get("competitionName") or
+                            (first_evt.get("competition", {}) or {}).get("name", "") or "?")
+                print(f"  >> Tag {tag_id}: {len(events)} events, ex='{name_hint[:40]}' (pas baseball)")
                 continue
+            print(f"  >> Tag {tag_id}: BASEBALL TROUVÉ ({len(events)} events)")
 
             result = []
             for ev in events:
