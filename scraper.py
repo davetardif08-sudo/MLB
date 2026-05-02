@@ -599,7 +599,12 @@ def _fetch_one_event_api(event_id: str, url_map: dict) -> Optional[Match]:
                 print(f"    [DEBUG] Market[0] name: {m0.get('name', '?')} / display: {m0.get('displayName', '?')}")
                 outs = m0.get("outcomes", []) or m0.get("selections", [])
                 if outs:
-                    print(f"    [DEBUG] Outcome[0]: {json.dumps(outs[0])[:200]}")
+                    print(f"    [DEBUG] Outcome[0] FULL: {json.dumps(outs[0])[:600]}")
+            # Logger aussi le name de l'event pour confirmer le format teams
+            print(f"    [DEBUG] Event name: '{ev0.get('name', '')}'")
+            # Logger tous les noms de markets
+            mkt_names = [m.get('name', '?') for m in mkts]
+            print(f"    [DEBUG] All markets: {mkt_names}")
 
         for ev in events_list:
             match = _parse_event_api(ev)
@@ -613,6 +618,53 @@ def _fetch_one_event_api(event_id: str, url_map: dict) -> Optional[Match]:
         return None
 
 
+def _extract_odds_value(outcome: dict) -> float:
+    """Extrait la cote décimale d'un outcome, en cherchant dans plusieurs champs."""
+    # Essayer plusieurs structures possibles
+    for key in ("price", "currentPrice", "odds", "decimalOdds", "priceDecimal"):
+        v = outcome.get(key)
+        if isinstance(v, dict):
+            for sub in ("decimal", "decimalOdds", "value", "amount"):
+                if sub in v:
+                    try:
+                        return float(v[sub])
+                    except (ValueError, TypeError):
+                        pass
+        elif v is not None:
+            try:
+                f = float(v)
+                if 1.0 < f < 100.0:
+                    return f
+            except (ValueError, TypeError):
+                pass
+
+    # Chercher dans priceHistory
+    hist = outcome.get("priceHistory", [])
+    if hist and isinstance(hist, list):
+        last = hist[-1]
+        if isinstance(last, dict):
+            for sub in ("decimal", "decimalOdds", "value", "price"):
+                if sub in last:
+                    try:
+                        return float(last[sub])
+                    except (ValueError, TypeError):
+                        pass
+    return 0.0
+
+
+def _extract_teams_from_name(name: str) -> tuple[str, str]:
+    """Extrait (away, home) depuis le name de l'event. Format: 'Team A à Team B' ou 'Team A c. Team B'."""
+    if not name:
+        return ("", "")
+    # Format français Mise-O-Jeu : "Équipe A à Équipe B" (away à home)
+    for sep in [" à ", " c. ", " vs ", " - "]:
+        if sep in name:
+            parts = name.split(sep, 1)
+            if len(parts) == 2:
+                return (parts[0].strip(), parts[1].strip())
+    return ("", "")
+
+
 def _parse_event_api(ev: dict) -> Optional[Match]:
     """Parse un événement API en objet Match avec ses cotes."""
     try:
@@ -620,19 +672,14 @@ def _parse_event_api(ev: dict) -> Optional[Match]:
         if not eid:
             return None
 
-        # Extraire les équipes
-        participants = ev.get("participants", [])
-        if len(participants) < 2:
-            return None
-
-        # Convention Mise-O-Jeu : participant[0] = away, participant[1] = home
-        away_raw = participants[0].get("name", "").strip()
-        home_raw = participants[1].get("name", "").strip()
+        # Extraire les équipes depuis le name de l'event (pas de participants)
+        ev_name = ev.get("name", "")
+        away_raw, home_raw = _extract_teams_from_name(ev_name)
         if not away_raw or not home_raw:
             return None
 
         # Date et heure
-        start_iso = ev.get("startTimeUtc") or ev.get("startTime", "")
+        start_iso = ev.get("startTime", "") or ev.get("startTimeUtc", "")
         try:
             dt_utc = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
             local = dt_utc.replace(tzinfo=None) - timedelta(hours=4)
@@ -664,18 +711,10 @@ def _parse_event_api(ev: dict) -> Optional[Match]:
                 continue
 
             grp = BetGroup(bet_type=mkt_name)
-            for outcome in mkt.get("outcomes", []) or mkt.get("selections", []):
+            outcomes = mkt.get("outcomes", []) or mkt.get("selections", [])
+            for outcome in outcomes:
                 sel_name = (outcome.get("name", "") or outcome.get("displayName", "")).strip()
-                price = outcome.get("price", {})
-                # Le prix peut être un dict {decimal: 1.95} ou un float direct
-                if isinstance(price, dict):
-                    odds_val = price.get("decimal") or price.get("decimalOdds")
-                else:
-                    odds_val = price
-                try:
-                    odds_f = float(odds_val) if odds_val else 0
-                except (ValueError, TypeError):
-                    odds_f = 0
+                odds_f = _extract_odds_value(outcome)
                 if odds_f > 1.0 and sel_name:
                     sel_id = outcome.get("id", "") or outcome.get("selectionId", "")
                     grp.selections.append(Selection(
