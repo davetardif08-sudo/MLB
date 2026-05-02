@@ -498,46 +498,48 @@ def _fetch_api_baseball_matches() -> list[dict]:
         today = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
 
         # Étape 1 : récupérer la liste des événements baseball du jour
-        api_url = f"{API_BASE}/event-list"
-        params = {
-            "drilldowIds": BASEBALL_TAG_ID,
-            "lang": "fr",
-            "countryCode": "CA",
-            "limit": 100,
-        }
-        print(f"  >> API event-list (baseball) : {api_url}")
-        resp = _API_SESSION.get(api_url, params=params, timeout=15)
+        api_url = f"{API_BASE}/event-list?drilldownTagIds={BASEBALL_TAG_ID}&lang=fr"
+        print(f"  >> API event-list (baseball): {api_url}")
+        resp = _API_SESSION.get(api_url, timeout=15)
         resp.raise_for_status()
         data = resp.json()
 
         events = data.get("events", [])
-        print(f"     API: {len(events)} événements baseball trouvés")
+        print(f"     API: {len(events)} événements trouvés")
 
         matches_data = []
         for evt in events:
-            eid = evt.get("eventId", "")
-            if not eid:
+            try:
+                eid = evt.get("eventId", "")
+                if not eid:
+                    continue
+
+                # Filtrer par date (aujourd'hui)
+                evt_date = evt.get("eventDate", "")[:10]
+                if evt_date != today:
+                    continue
+
+                # Extraire les équipes (format: [away, home])
+                participants = evt.get("participants", [])
+                if len(participants) < 2:
+                    continue
+
+                away = participants[0].get("name", "").strip()
+                home = participants[1].get("name", "").strip()
+
+                if away and home:
+                    matches_data.append({
+                        "eid": eid,
+                        "away_team": _normalize_team_name(away),
+                        "home_team": _normalize_team_name(home),
+                        "date": today,
+                        "raw_event": evt,
+                    })
+            except Exception as e:
+                # Ignorer les événements mal formés
                 continue
 
-            # Filtrer par sport (baseball) et date (aujourd'hui)
-            # L'API retourne les dates en format "2026-05-01"
-            evt_date = evt.get("eventDate", "")[:10]
-            if evt_date != today:
-                continue
-
-            # Extraire les équipes
-            away = evt.get("participants", [{}])[0].get("name", "")
-            home = evt.get("participants", [{}])[1].get("name", "") if len(evt.get("participants", [])) > 1 else ""
-
-            if away and home:
-                matches_data.append({
-                    "eid": eid,
-                    "away_team": _normalize_team_name(away),
-                    "home_team": _normalize_team_name(home),
-                    "date": today,
-                    "raw_event": evt,
-                })
-
+        print(f"     API: {len(matches_data)} matchs baseball aujourd'hui")
         return matches_data
     except Exception as e:
         print(f"  >> Erreur API event-list: {type(e).__name__}: {e}")
