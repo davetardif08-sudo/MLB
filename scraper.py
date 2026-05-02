@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Optional
 from playwright.async_api import async_playwright
+import json
 
 import requests as _requests_mod
 
@@ -66,6 +67,17 @@ class Match:
 BASE_URL = "https://miseojeu.lotoquebec.com"
 LIST_URL = f"{BASE_URL}/fr/offre-de-paris/baseball/mlb/matchs?idAct=10"
 MATCH_URL_TEMPLATE = f"{BASE_URL}/fr/offre-de-paris/baseball/mlb/matchs?idEve={{eid}}"
+
+# --- API REST (contourne géolocalisation comme dans app NHL) ---
+# L'API content-service n'est PAS géo-bloquée contrairement au site HTML
+API_BASE = "https://content.mojp-sgdigital-jel.com/content-service/api/v1/q"
+BASEBALL_TAG_ID = "10"  # Tag ID pour baseball/MLB (confirmé par idAct=10)
+_API_SESSION = _requests_mod.Session()
+_API_SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer": BASE_URL,
+    "Origin": BASE_URL,
+})
 
 # Marchés à GARDER (titre exact ou contenu)
 MARKET_KEYWORDS_KEEP = [
@@ -476,6 +488,62 @@ class MiseOJeuMLBScraper:
             await page.close()
 
 
+def _fetch_api_baseball_matches() -> list[dict]:
+    """
+    Récupère les matchs baseball via l'API REST Mise-O-Jeu (contourne géolocalisation).
+    Retourne une liste de dicts {eid, away_team, home_team, odds_list, ...}
+    Cette API n'est PAS géo-bloquée contrairement au site HTML.
+    """
+    try:
+        today = (datetime.utcnow() - timedelta(hours=4)).strftime('%Y-%m-%d')
+
+        # Étape 1 : récupérer la liste des événements baseball du jour
+        api_url = f"{API_BASE}/event-list"
+        params = {
+            "drilldowIds": BASEBALL_TAG_ID,
+            "lang": "fr",
+            "countryCode": "CA",
+            "limit": 100,
+        }
+        print(f"  >> API event-list (baseball) : {api_url}")
+        resp = _API_SESSION.get(api_url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        events = data.get("events", [])
+        print(f"     API: {len(events)} événements baseball trouvés")
+
+        matches_data = []
+        for evt in events:
+            eid = evt.get("eventId", "")
+            if not eid:
+                continue
+
+            # Filtrer par sport (baseball) et date (aujourd'hui)
+            # L'API retourne les dates en format "2026-05-01"
+            evt_date = evt.get("eventDate", "")[:10]
+            if evt_date != today:
+                continue
+
+            # Extraire les équipes
+            away = evt.get("participants", [{}])[0].get("name", "")
+            home = evt.get("participants", [{}])[1].get("name", "") if len(evt.get("participants", [])) > 1 else ""
+
+            if away and home:
+                matches_data.append({
+                    "eid": eid,
+                    "away_team": _normalize_team_name(away),
+                    "home_team": _normalize_team_name(home),
+                    "date": today,
+                    "raw_event": evt,
+                })
+
+        return matches_data
+    except Exception as e:
+        print(f"  >> Erreur API event-list: {type(e).__name__}: {e}")
+        return []
+
+
 def _get_mlb_com_matches() -> dict:
     """
     Récupère la liste officielle des matchs du jour (heure Montréal) depuis MLB.com,
@@ -653,16 +721,27 @@ def scrape_sync(headless: bool = True) -> list[Match]:
     mlb_matches_map = _get_mlb_com_matches()
     print(f"[scraper]      MLB.com: {len(mlb_matches_map)} matchs")
 
-    # 2) Loto-Québec en secondaire (cotes seulement, peut échouer)
-    print("[scraper] 2/2 — Loto-Québec (cotes)...")
+    # 2) Loto-Québec en secondaire (cotes)
+    # 2a) Essayer l'API REST en premier (NON géo-bloquée)
+    print("[scraper] 2/2 — Loto-Québec API (cotes)...")
     odds_matches = []
-    try:
-        scraper = MiseOJeuMLBScraper(headless=headless)
-        odds_matches = asyncio.run(scraper.scrape())
-        print(f"[scraper]      Loto-Québec: {len(odds_matches)} matchs avec cotes")
-    except Exception as e:
-        print(f"[scraper]      Loto-Québec ERREUR: {type(e).__name__}: {e}")
+    api_matches = _fetch_api_baseball_matches()
+    if api_matches:
+        print(f"[scraper]      API: {len(api_matches)} matchs trouvés")
+        # TODO: Parser les cotes de l'API et créer des Match objects
+        # Pour l'instant, on continue avec Playwright comme fallback
         odds_matches = []
+
+    # 2b) Fallback : Playwright si l'API ne donne rien
+    if not api_matches:
+        print("[scraper]      API vide/erreur — fallback Playwright...")
+        try:
+            scraper = MiseOJeuMLBScraper(headless=headless)
+            odds_matches = asyncio.run(scraper.scrape())
+            print(f"[scraper]      Playwright: {len(odds_matches)} matchs avec cotes")
+        except Exception as e:
+            print(f"[scraper]      Playwright ERREUR: {type(e).__name__}: {e}")
+            odds_matches = []
 
     # 3) Construire la liste finale : MLB.com base + cotes Loto-Q quand disponibles
     if not mlb_matches_map and not odds_matches:

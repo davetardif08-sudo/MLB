@@ -2822,7 +2822,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "loss",
     "saved_at": "2026-04-27T09:27:47.054775"
   },
   {
@@ -2864,7 +2864,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.102409"
   },
   {
@@ -2885,7 +2885,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.123413"
   },
   {
@@ -2906,7 +2906,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.146506"
   },
   {
@@ -2927,7 +2927,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.181632"
   },
   {
@@ -2948,7 +2948,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.208351"
   },
   {
@@ -2969,7 +2969,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.242338"
   },
   {
@@ -2990,7 +2990,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.268253"
   },
   {
@@ -3011,7 +3011,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "win",
     "saved_at": "2026-04-27T09:27:47.298786"
   },
   {
@@ -3053,7 +3053,7 @@
     "signals": {},
     "analysis_mode": "standard",
     "system_version": "",
-    "outcome": null,
+    "outcome": "loss",
     "saved_at": "2026-04-27T16:24:17.923027"
   },
   {
@@ -3074,7 +3074,91 @@
     "signals": {},
     "analysis_mode": "conservative",
     "system_version": "",
-    "outcome": null,
+    "outcome": "loss",
     "saved_at": "2026-04-27T16:24:17.967209"
+  },
+  {
+    "key": "2026-04-29|San Diego (Padres)|Chicago (Cubs)|Total de points dans le match (total additionnel n° 1)|Moins de 7,5",
+    "date": "2026-04-29",
+    "time": "15:00",
+    "home_team": "San Diego (Padres)",
+    "away_team": "Chicago (Cubs)",
+    "bet_type": "Total de points dans le match (total additionnel n° 1)",
+    "selection": "Moins de 7,5",
+    "odds": 2.2,
+    "fair_prob": 0.4571,
+    "math_prob": 0.3972602739726027,
+    "value_score": 46.405000000000044,
+    "recommendation": "Éviter",
+    "sport": "baseball",
+    "kelly_fraction": 0.0012,
+    "signals": {},
+    "analysis_mode": "conservative",
+    "system_version": "",
+    "outcome": "loss",
+    "saved_at": "2026-04-29T14:55:55.879017"
+  },
+  {
+    "key": "2026-04-29|Milwaukee (Brewers)|Arizona (Diamondbacks)|Total de points dans le match (total additionnel n° 2)|Plus de 9,5",
+    "date": "2026-04-29",
+    "time": "15:00",
+    "home_team": "Milwaukee (Brewers)",
+    "away_team": "Arizona (Diamondbacks)",
+    "bet_type": "Total de points dans le match (total additionnel n° 2)",
+    "selection": "Plus de 9,5",
+    "odds": 2.2,
+    "fair_prob": 0.45611,
+    "math_prob": 0.3972602739726027,
+    "value_score": 45.860500000000044,
+    "recommendation": "Éviter",
+    "sport": "baseball",
+    "kelly_fraction": 0.0007,
+    "signals": {},
+    "analysis_mode": "conservative",
+    "system_version": "",
+    "outcome": "loss",
+    "saved_at": "2026-04-29T14:56:28.796690"
+  },
+  {
+    "key": "2026-05-01|Washington (Nationals)|Milwaukee (Brewers)|Total de points dans le match (total additionnel n° 2)|Plus de 8,5",
+    "date": "2026-05-01",
+    "time": "18:30",
+    "home_team": "Washington (Nationals)",
+    "away_team": "Milwaukee (Brewers)",
+    "bet_type": "Total de points dans le match (total additionnel n° 2)",
+    "selection": "Plus de 8,5",
+    "odds": 2.0,
+    "fair_prob": 0.50832,
+    "math_prob": 0.4366197183098592,
+    "value_score": 49.16,
+    "recommendation": "Éviter",
+    "sport": "baseball",
+    "kelly_fraction": 0.0042,
+    "signals": {},
+    "analysis_mode": "standard",
+    "system_version": "",
+    "outcome": null,
+    "saved_at": "2026-05-01T15:46:17.542035"
+  },
+  {
+    "key": "2026-05-01|Saint-Louis (Cardinals)|Los Angeles (Dodgers)|Total de points dans le match (total additionnel n° 2)|Plus de 9,5",
+    "date": "2026-05-01",
+    "time": "18:30",
+    "home_team": "Saint-Louis (Cardinals)",
+    "away_team": "Los Angeles (Dodgers)",
+    "bet_type": "Total de points dans le match (total additionnel n° 2)",
+    "selection": "Plus de 9,5",
+    "odds": 2.2,
+    "fair_prob": 0.457595,
+    "math_prob": 0.3972602739726027,
+    "value_score": 46.67725000000002,
+    "recommendation": "Éviter",
+    "sport": "baseball",
+    "kelly_fraction": 0.0014,
+    "signals": {},
+    "analysis_mode": "conservative",
+    "system_version": "",
+    "outcome": null,
+    "saved_at": "2026-05-01T15:46:17.585002"
   }
 ]
