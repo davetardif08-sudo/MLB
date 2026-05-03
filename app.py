@@ -736,7 +736,19 @@ def api_yesterday():
             if is_bet:
                 pending += 1
         roi += profit
-        enriched.append({**pick, "outcome": outcome, "profit": round(profit, 2), "is_bet": is_bet})
+
+        # Générer les logos s'ils ne sont pas dans le snapshot (rétrocompatibilité)
+        away_logo = pick.get("away_logo") or _get_mlb_team_logo(pick.get("away_team", ""))
+        home_logo = pick.get("home_logo") or _get_mlb_team_logo(pick.get("home_team", ""))
+
+        enriched.append({
+            **pick,
+            "outcome": outcome,
+            "profit": round(profit, 2),
+            "is_bet": is_bet,
+            "away_logo": away_logo,
+            "home_logo": home_logo,
+        })
 
     combo_results = _resolve_combos(snap.get("combos", []), mlb_results)
 
