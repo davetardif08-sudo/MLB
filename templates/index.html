@@ -782,23 +782,7 @@
           <span class="count-chip" id="yesterday-count">—</span>
         </div>
         <div id="yesterday-results-body">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Match</th>
-                <th>Type de pari</th>
-                <th>Sélection</th>
-                <th class="center">Cote</th>
-                <th class="center">Mise</th>
-                <th class="center">Prob. estimée</th>
-                <th class="center">Avis</th>
-                <th class="center">Résultat</th>
-                <th class="right">Profit (u)</th>
-              </tr>
-            </thead>
-            <tbody id="yesterday-tbody"></tbody>
-          </table>
+          <div id="cards-yesterday" class="cards-wrap"></div>
         </div>
       </div>
 
@@ -1761,6 +1745,153 @@ async function loadYesterday() {
   }
 }
 
+function renderResultCards(records) {
+  const container = document.getElementById('cards-yesterday');
+  if (!container || !records) return;
+
+  // Trier: bets d'abord, puis prédictions
+  const sorted = [...records].sort((a, b) => {
+    if (a.is_bet && !b.is_bet) return -1;
+    if (!a.is_bet && b.is_bet) return 1;
+    return 0;
+  });
+
+  container.innerHTML = sorted.map((r) => {
+    const homeLogoUrl = r.home_logo || '';
+    const awayLogoUrl = r.away_logo || '';
+    const cote = (r.odds || 0).toFixed(2);
+    const mise = r.mise ? '$' + (r.mise || 0).toFixed(2) : '—';
+    const betType = (r.bet_type || '').toLowerCase();
+    const selection = (r.selection || '').toLowerCase();
+    const isBet = r.is_bet;
+
+    // Déterminer le résultat et la couleur
+    let outcomeClass = '', outcomeIcon = '';
+    if (r.outcome === 'win') {
+      outcomeClass = 'outcome-win';
+      outcomeIcon = '✓';
+    } else if (r.outcome === 'loss') {
+      outcomeClass = 'outcome-loss';
+      outcomeIcon = '✕';
+    } else if (r.outcome === 'push') {
+      outcomeClass = 'outcome-push';
+      outcomeIcon = '↔';
+    } else {
+      outcomeClass = 'outcome-pending';
+      outcomeIcon = '⏳';
+    }
+
+    // Profit/loss display
+    const profit = r.profit ?? null;
+    let profitDisplay = '—';
+    if (isBet && profit != null) {
+      profitDisplay = profit >= 0 ? '+$' + profit.toFixed(2) : '-$' + Math.abs(profit).toFixed(2);
+    }
+
+    // Détecter Over/Under
+    const isOverUnder = betType.includes('total') || betType.includes('over') || betType.includes('under');
+
+    let circleClassAway, circleClassHome, displayBetType;
+
+    if (isOverUnder) {
+      const isOver = selection.includes('over') || selection.includes('plus');
+      circleClassAway = isOver ? 'over' : 'under';
+      circleClassHome = isOver ? 'over' : 'under';
+      const numberMatch = betType.match(/(\d+\.?\d*)/);
+      const totalValue = numberMatch ? numberMatch[1] : '';
+      const overUnderText = isOver ? 'Over' : 'Under';
+      displayBetType = `Total ${overUnderText} ${totalValue}`;
+
+      return `
+        <div class="prediction-card" style="opacity:${isBet ? 1 : 0.72}">
+          <div class="card-header">
+            <div class="team-logos" style="justify-content: center; gap: 20px;">
+              <div class="logo-circle ${circleClassAway}">
+                ${awayLogoUrl ? `<img class="card-logo" src="${awayLogoUrl}" alt="${r.away_team}">` : ''}
+              </div>
+              <div class="logo-circle ${circleClassHome}">
+                ${homeLogoUrl ? `<img class="card-logo" src="${homeLogoUrl}" alt="${r.home_team}">` : ''}
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; font-size:12px; color:#10b981; font-weight:600; margin: 4px 0 4px 0;">${displayBetType}</div>
+          <div style="text-align:center; font-size:11px; color:var(--text-dim); margin-bottom: 6px;">${r.date||''} ${r.time||''}</div>
+          <div class="card-body">
+            <div class="card-stats-row">
+              <div class="cote">
+                <div class="label">Cote</div>
+                <div class="value">${cote}</div>
+              </div>
+              <div class="mise">
+                <div class="label">Mise</div>
+                <div class="value">${mise}</div>
+              </div>
+            </div>
+            <div style="text-align:center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+              <span class="${outcomeClass}" style="font-weight:600; font-size:13px;">${outcomeIcon} ${r.outcome === 'win' ? 'Victoire' : r.outcome === 'loss' ? 'Défaite' : r.outcome === 'push' ? 'Nul' : 'Attente'}</span>
+              <div style="font-size:12px; color:${profit >= 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)'}; font-weight:600; margin-top:4px;">${profitDisplay}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      const awayTeam = (r.away_team || '').toLowerCase();
+      const homeTeam = (r.home_team || '').toLowerCase();
+
+      if (selection.includes(awayTeam) || (awayTeam && selection.startsWith(awayTeam))) {
+        circleClassAway = 'win';
+        circleClassHome = 'lose';
+      } else if (selection.includes(homeTeam) || (homeTeam && selection.startsWith(homeTeam))) {
+        circleClassAway = 'lose';
+        circleClassHome = 'win';
+      } else {
+        circleClassAway = 'win';
+        circleClassHome = 'lose';
+      }
+      displayBetType = betType;
+
+      return `
+        <div class="prediction-card" style="opacity:${isBet ? 1 : 0.72}">
+          <div class="card-header">
+            <div class="team-logos">
+              <div class="logo-wrapper">
+                <div class="logo-circle ${circleClassAway}">
+                  ${awayLogoUrl ? `<img class="card-logo" src="${awayLogoUrl}" alt="${r.away_team}">` : ''}
+                </div>
+                ${circleClassAway === 'win' && displayBetType ? `<div class="bet-type-label">${displayBetType}</div>` : ''}
+              </div>
+              <span style="font-size:16px; font-weight:700; color:#9ca3af;">vs</span>
+              <div class="logo-wrapper">
+                <div class="logo-circle ${circleClassHome}">
+                  ${homeLogoUrl ? `<img class="card-logo" src="${homeLogoUrl}" alt="${r.home_team}">` : ''}
+                </div>
+                ${circleClassHome === 'win' && displayBetType ? `<div class="bet-type-label">${displayBetType}</div>` : ''}
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; font-size:11px; color:var(--text-dim); margin: 8px 0 6px 0;">${r.date||''} ${r.time||''}</div>
+          <div class="card-body">
+            <div class="card-stats-row">
+              <div class="cote">
+                <div class="label">Cote</div>
+                <div class="value">${cote}</div>
+              </div>
+              <div class="mise">
+                <div class="label">Mise</div>
+                <div class="value">${mise}</div>
+              </div>
+            </div>
+            <div style="text-align:center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+              <span class="${outcomeClass}" style="font-weight:600; font-size:13px;">${outcomeIcon} ${r.outcome === 'win' ? 'Victoire' : r.outcome === 'loss' ? 'Défaite' : r.outcome === 'push' ? 'Nul' : 'Attente'}</span>
+              <div style="font-size:12px; color:${profit >= 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)'}; font-weight:600; margin-top:4px;">${profitDisplay}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }).join('');
+}
+
 function renderYesterday(data) {
   const records = data.picks || data.records || [];
 
@@ -1803,71 +1934,8 @@ function renderYesterday(data) {
     betCount + ' mis' + (betCount > 1 ? 'es' : 'e') +
     (predCount ? ' · ' + predCount + ' prédiction' + (predCount > 1 ? 's' : '') : '');
 
-  const tbody = document.getElementById('yesterday-tbody');
-  tbody.innerHTML = '';
-
-  function makeRow(r, i, isBet) {
-    const outcome = r.outcome;
-    let outTxt, outClass, profitTxt, profitClass;
-    const profit = r.profit ?? null;
-    if (outcome === 'win') {
-      outTxt = '&#10003; Victoire'; outClass = 'outcome-win';
-      profitTxt = isBet && profit != null ? '+$' + profit.toFixed(2) : '&#10003;';
-      profitClass = 'profit-pos';
-    } else if (outcome === 'loss') {
-      outTxt = '&#10005; Défaite'; outClass = 'outcome-loss';
-      profitTxt = isBet && profit != null ? '-$' + Math.abs(profit).toFixed(2) : '&#10005;';
-      profitClass = 'profit-neg';
-    } else if (outcome === 'push') {
-      outTxt = '&#8596; Nul'; outClass = 'outcome-push';
-      profitTxt = isBet ? '$0.00' : '&#8596;'; profitClass = '';
-    } else {
-      outTxt = '&#8987; En attente'; outClass = 'outcome-pending';
-      profitTxt = '—'; profitClass = '';
-    }
-
-    const rec = r.recommendation || '';
-    let badgeClass = 'badge-neutre';
-    if (rec.includes('Excellent')) badgeClass = 'badge-excellent';
-    else if (rec.startsWith('Bon')) badgeClass = 'badge-bon';
-
-    const odds = r.odds || 2.0;
-    const oddsClass = odds <= 1.60 ? 'odds-low' : odds <= 2.20 ? 'odds-mid' : odds <= 3.50 ? 'odds-high' : 'odds-very';
-    const fp = ((r.fair_prob || 0) * 100).toFixed(1);
-    const miseStr = isBet ? '$' + (r.mise || 0).toFixed(2) : '<span style="color:var(--text-dim);font-size:11px">—</span>';
-    const rowStyle = isBet ? '' : 'opacity:0.72;';
-
-    const tr = document.createElement('tr');
-    tr.style.cssText = rowStyle;
-    tr.innerHTML = `
-      <td class="rank">${i + 1}</td>
-      <td class="match-cell">
-        ${mlbMatchLogosHtml(r.away_team, r.home_team)}
-        <div class="meta" style="text-align:center;">${r.date||''} ${r.time||''} · MLB</div>
-      </td>
-      <td style="font-size:12px;color:var(--text-dim)">${r.bet_type||''}</td>
-      <td style="font-weight:600">${r.selection||''}</td>
-      <td class="center"><span class="${oddsClass}">${odds.toFixed(2)}</span></td>
-      <td class="center" style="font-weight:600">${miseStr}</td>
-      <td class="center" style="color:var(--text-dim)">${fp}%</td>
-      <td class="center"><span class="badge ${badgeClass}">${rec.replace(' ***','').replace(' **','')}</span></td>
-      <td class="center"><span class="${outClass}">${outTxt}</span></td>
-      <td class="right"><span class="${profitClass}">${profitTxt}</span></td>
-    `;
-    tbody.appendChild(tr);
-  }
-
-  // Paris misés en premier (avec séparateur si des prédictions suivent)
-  bets.forEach((r, i) => makeRow(r, i + 1, true));
-
-  if (preds.length) {
-    const sep = document.createElement('tr');
-    sep.innerHTML = `<td colspan="10" style="padding:6px 10px;background:var(--bg3);font-size:11px;color:var(--text-dim);font-style:italic;border-top:2px solid var(--border)">
-      Prédictions analysées (non misées) — ${preds.length} entrée${preds.length > 1 ? 's' : ''}
-    </td>`;
-    tbody.appendChild(sep);
-    preds.forEach((r, i) => makeRow(r, bets.length + i + 1, false));
-  }
+  // Render cards instead of table
+  renderResultCards(records);
 
   hide('yesterday-loading');
   show('yesterday-content');

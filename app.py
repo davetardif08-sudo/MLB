@@ -468,6 +468,8 @@ def api_save_snapshot():
             "factor_scores":  p.get("factor_scores", {}),
             "weather":        weather_snap,
             "is_bet":         is_bet,
+            "away_logo":      p.get("away_logo", ""),
+            "home_logo":      p.get("home_logo", ""),
         }
 
     today    = _today_mtl()
