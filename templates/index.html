@@ -183,7 +183,7 @@
 
   /* ── Stats bar ──────────────────────────────────────────────── */
   .stats-bar {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    display: none !important; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
     gap: 12px; padding: 14px 24px;
     background: var(--bg2); border-bottom: 1px solid var(--border);
   }
@@ -219,7 +219,7 @@
   .kelly-banner {
     background: var(--bg2); border: 1px solid var(--mlb-dim);
     border-radius: 10px; padding: 12px 20px; margin-bottom: 18px;
-    display: flex; align-items: center; justify-content: space-between;
+    display: none !important; align-items: center; justify-content: space-between;
     flex-wrap: wrap; gap: 12px;
   }
   .kelly-banner .kinfo { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
