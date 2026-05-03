@@ -6,6 +6,7 @@ primary_region = "yyz"
 
 [env]
   PORT = "8080"
+  DATA_DIR = "/data"
 
 [http_service]
   internal_port = 8080
@@ -23,3 +24,7 @@ primary_region = "yyz"
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
+
+[[mounts]]
+  source = "mlb_data"
+  destination = "/data"

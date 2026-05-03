@@ -367,11 +367,167 @@
   .gain-neg { color: var(--loss); font-weight: 700; }
   .gain-pot { color: var(--text-dim); font-size: 11px; }
 
+  /* ─────────────────── CARD LAYOUT STYLES ─────────────────── */
+  .cards-wrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    width: 100%;
+    padding: 0;
+  }
+
+  .prediction-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    transition: all 0.2s;
+  }
+
+  .prediction-card:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+  }
+
+  .team-logos {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .logo-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-height: 105px;
+    justify-content: flex-start;
+  }
+
+  .logo-circle {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  /* Cercle vert pour équipe gagnante prédite */
+  .logo-circle.win {
+    background: rgba(16, 185, 129, 0.15);
+    border: 2px solid rgba(16, 185, 129, 0.3);
+  }
+
+  /* Cercle gris pour équipe non prédite */
+  .logo-circle.lose {
+    background: rgba(156, 163, 175, 0.1);
+    border: 2px solid rgba(156, 163, 175, 0.3);
+  }
+
+  /* Cercle vert pour Over */
+  .logo-circle.over {
+    background: rgba(16, 185, 129, 0.15);
+    border: 2px solid rgba(16, 185, 129, 0.3);
+  }
+
+  /* Cercle jaune pour Under */
+  .logo-circle.under {
+    background: rgba(245, 158, 11, 0.15);
+    border: 2px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .card-logo {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
+  }
+
+  .bet-type-label {
+    font-size: 11px;
+    color: #10b981;
+    font-weight: 600;
+    text-transform: uppercase;
+    text-align: center;
+    max-width: 90px;
+    line-height: 1.3;
+  }
+
+  .card-body {
+    width: 100%;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 8px;
+    margin-top: 6px;
+  }
+
+  .card-stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .card-stats-row > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .card-stats-row .label {
+    font-size: 11px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .card-stats-row .value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  .card-stats-row .mise .value {
+    color: var(--green);
+  }
+
   @media (max-width: 900px) {
     header { flex-direction: column; gap: 10px; align-items: flex-start; }
     .stats-bar { grid-template-columns: repeat(2,1fr); }
     .score-bar-bg { display: none; }
     td, th { padding: 7px 9px; }
+    .cards-wrap { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .prediction-card { padding: 14px; }
+    .logo-circle { width: 75px; height: 75px; }
+    .card-logo { width: 60px; height: 60px; }
+  }
+
+  @media (max-width: 640px) {
+    .cards-wrap { grid-template-columns: 1fr; }
+    .prediction-card { padding: 12px; }
+    .logo-circle { width: 70px; height: 70px; }
+    .card-logo { width: 55px; height: 55px; }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -552,24 +708,9 @@
         <div class="spinner"></div>
         <p id="loading-sub">Scraping des cotes Mise-O-Jeu…</p>
       </div>
+      <!-- CARD VIEW (primary) -->
       <div id="today-results" style="display:none">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th data-sort="match">MATCH <span class="sort-icon"></span></th>
-              <th data-sort="bet_type">TYPE DE PARI <span class="sort-icon"></span></th>
-              <th data-sort="selection">SÉLECTION <span class="sort-icon"></span></th>
-              <th class="center" data-sort="odds">COTE <span class="sort-icon"></span></th>
-              <th class="center" data-sort="house_margin">MARGE <span class="sort-icon"></span></th>
-              <th class="center" data-sort="value_score">SCORE VALEUR <span class="sort-icon"></span></th>
-              <th class="center" data-sort="kelly_bet">🪙 MISE /$<span id="th-budget">10</span> <span class="sort-icon"></span></th>
-              <th class="right" data-sort="retour">RETOUR POTENTIEL <span class="sort-icon"></span></th>
-              <th class="center" data-sort="recommendation">AVIS <span class="sort-icon"></span></th>
-            </tr>
-          </thead>
-          <tbody id="opps-tbody"></tbody>
-        </table>
+        <div id="cards-mlb" class="cards-wrap"></div>
       </div>
       <div class="empty-state" id="today-empty" style="display:none">
         <div class="icon">🔍</div>
@@ -992,6 +1133,7 @@ let _cmpLoaded       = false;
 let _cmpChart        = null;
 let _currentPicks    = [];
 let _oppsData        = [];   // toutes les opps — pour le tri
+let _mlbRawRows      = [];   // raw rows pour les cartes
 let _combosData      = [];   // combos générés ce soir — pour le snapshot
 let _lowValueNight   = false; // flag soirée déconseillée — sauvegardé dans le snapshot
 let _sortCol         = null;
@@ -1331,6 +1473,133 @@ function _renderOppsTable(opps) {
   });
 }
 
+function renderCards(rows) {
+  const container = document.getElementById('cards-mlb');
+  if (!container || !rows) return;
+
+  // Mémoriser les lignes pour saveSnapshot()
+  _mlbRawRows = rows;
+
+  // Trier: mises > 0 en premier, ensuite par ordre original
+  const sorted = [...rows].sort((a, b) => {
+    const miseA = parseFloat(a.kelly_bet || a.mise || 0);
+    const miseB = parseFloat(b.kelly_bet || b.mise || 0);
+    if (miseB > 0 && miseA === 0) return 1;   // B a une mise, pas A → B en premier
+    if (miseA > 0 && miseB === 0) return -1;  // A a une mise, pas B → A en premier
+    if (miseA !== miseB) return miseB - miseA; // Trier par mise décroissante
+    return 0;
+  });
+
+  container.innerHTML = sorted.map((r) => {
+    // Charger logos MLB via statsapi ou fallback
+    const homeLogoUrl = r.home_logo || '';
+    const awayLogoUrl = r.away_logo || '';
+    const mise = ((r.kelly_bet || r.mise) || 0).toFixed(2);
+    const cote = (r.odds || 0).toFixed(2);
+    const betType = (r.bet_type || '').toLowerCase();
+    const selection = (r.selection_label || r.selection || '').toLowerCase();
+
+    // Détecter si c'est un bet Over/Under (Total de points)
+    const isOverUnder = betType.includes('total') || betType.includes('over') || betType.includes('under');
+
+    let circleClassAway, circleClassHome, displayBetType;
+
+    if (isOverUnder) {
+      // Pour Over/Under: affichage centré avec logos côte à côte
+      const isOver = selection.includes('over') || selection.includes('plus');
+      circleClassAway = isOver ? 'over' : 'under';
+      circleClassHome = isOver ? 'over' : 'under';
+
+      // Extraire le nombre et créer le texte d'affichage
+      const numberMatch = betType.match(/(\d+\.?\d*)/);
+      const totalValue = numberMatch ? numberMatch[1] : '';
+      const overUnderText = isOver ? 'Over' : 'Under';
+      displayBetType = `Total ${overUnderText} ${totalValue}`;
+
+      // Pour O/U: rendu différent avec logos centrés et texte en dessous
+      return `
+        <div class="prediction-card">
+          <div class="card-header">
+            <div class="team-logos" style="justify-content: center; gap: 20px;">
+              <div class="logo-circle ${circleClassAway}">
+                ${awayLogoUrl ? `<img class="card-logo" src="${awayLogoUrl}" alt="${r.away_team}">` : ''}
+              </div>
+              <div class="logo-circle ${circleClassHome}">
+                ${homeLogoUrl ? `<img class="card-logo" src="${homeLogoUrl}" alt="${r.home_team}">` : ''}
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; font-size:12px; color:#10b981; font-weight:600; margin: 4px 0 8px 0;">${displayBetType}</div>
+          <div class="card-body">
+            <div class="card-stats-row">
+              <div class="cote">
+                <div class="label">Cote</div>
+                <div class="value">${cote}</div>
+              </div>
+              <div class="mise">
+                <div class="label">Mise</div>
+                <div class="value">$${mise}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      // Pour bets individuels (Gagnant / Moneyline): déterminer quelle équipe est prédite gagnante
+      const awayTeam = (r.away_team || '').toLowerCase();
+      const homeTeam = (r.home_team || '').toLowerCase();
+
+      // Comparer la sélection avec les noms d'équipes
+      if (selection.includes(awayTeam) || (awayTeam && selection.startsWith(awayTeam))) {
+        circleClassAway = 'win';
+        circleClassHome = 'lose';
+      } else if (selection.includes(homeTeam) || (homeTeam && selection.startsWith(homeTeam))) {
+        circleClassAway = 'lose';
+        circleClassHome = 'win';
+      } else {
+        circleClassAway = 'win';
+        circleClassHome = 'lose';
+      }
+      displayBetType = betType;
+    }
+
+    return `
+      <div class="prediction-card">
+        <div class="card-header">
+          <div class="team-logos">
+            <div class="logo-wrapper">
+              <div class="logo-circle ${circleClassAway}">
+                ${awayLogoUrl ? `<img class="card-logo" src="${awayLogoUrl}" alt="${r.away_team}">` : ''}
+              </div>
+              ${!isOverUnder && circleClassAway === 'win' && displayBetType ? `<div class="bet-type-label">${displayBetType}</div>` : ''}
+            </div>
+            <span style="font-size:16px; font-weight:700; color:#9ca3af;">vs</span>
+            <div class="logo-wrapper">
+              <div class="logo-circle ${circleClassHome}">
+                ${homeLogoUrl ? `<img class="card-logo" src="${homeLogoUrl}" alt="${r.home_team}">` : ''}
+              </div>
+              ${!isOverUnder && circleClassHome === 'win' && displayBetType ? `<div class="bet-type-label">${displayBetType}</div>` : ''}
+            </div>
+          </div>
+          ${isOverUnder ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:#10b981; font-weight:600;">${displayBetType}</div>` : ''}
+        </div>
+        <div class="card-body">
+          <div class="card-stats-row">
+            <div class="cote">
+              <div class="label">Cote</div>
+              <div class="value">${cote}</div>
+            </div>
+            <div class="mise">
+              <div class="label">Mise</div>
+              <div class="value">$${mise}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderToday(data) {
   const opps = data.opportunities || [];
   const allPreds = data.all_predictions || [];
@@ -1400,28 +1669,7 @@ function renderToday(data) {
   document.getElementById('kb-count').textContent    = opps.filter(o => (o.kelly_bet || 0) > 0).length;
 
   if (!allOpps.length) { setTodayState('empty'); return; }
-  _renderOppsTable(allOpps);
-
-  // Activer le tri sur les entêtes
-  document.querySelectorAll('thead th[data-sort]').forEach(th => {
-    th.onclick = () => {
-      const col = th.dataset.sort;
-      if (_sortCol === col) {
-        _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
-      } else {
-        _sortCol = col;
-        _sortDir = ['house_margin'].includes(col) ? 'asc' : 'desc';
-      }
-      document.querySelectorAll('thead th[data-sort]').forEach(h => h.classList.remove('sorted-asc','sorted-desc'));
-      th.classList.add(_sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
-      const sorted = [..._oppsData].sort((a, b) => {
-        const va = _sortValue(a, col), vb = _sortValue(b, col);
-        return _sortDir === 'asc' ? (va > vb ? 1 : va < vb ? -1 : 0)
-                                  : (va < vb ? 1 : va > vb ? -1 : 0);
-      });
-      _renderOppsTable(sorted);
-    };
-  });
+  renderCards(_oppsData);
 
   const modeTag = data.mode === 'conservative' ? ' · 🛡 Conservateur' : '';
   document.getElementById('opp-count').textContent = `${opps.length} paris + ${allOpps.length - opps.length} prédictions${modeTag}`;
@@ -2710,12 +2958,13 @@ async function loadLive(showSpinner = true) {
 }
 
 function renderLive(data) {
-  const picks = data.picks || [];
-  const bets  = picks.filter(p => p.is_bet);
-  const preds = picks.filter(p => !p.is_bet);
+  const allMatches = data.all_matches || [];
+  const bets  = allMatches.filter(p => p.is_bet);
+  const preds = allMatches.filter(p => !p.is_bet);
   const net   = data.net ?? 0;
   const netStr = (net >= 0 ? '+$' : '-$') + Math.abs(net).toFixed(2);
   const netCls = net >= 0 ? 'gain-pos' : 'gain-neg';
+  const totalMatches = data.total_matches ?? 0;
 
   // En-tête résumé
   let html = `
@@ -2725,6 +2974,10 @@ function renderLive(data) {
         <div class="live-chip">
           <div class="lc-label">Date</div>
           <div class="lc-val" style="font-size:13px">${formatDate(data.date)}</div>
+        </div>
+        <div class="live-chip">
+          <div class="lc-label">Matchs</div>
+          <div class="lc-val">${totalMatches}</div>
         </div>
         <div class="live-chip">
           <div class="lc-label">Mises</div>
@@ -2827,18 +3080,38 @@ function renderLive(data) {
       </tr>`;
   }
 
-  // Paris misés
-  const sortedBets = [...bets].sort(sortFn);
-  sortedBets.forEach((p, i) => { html += makeRow(p, i + 1, true); });
+  // Trier et afficher tous les matchs
+  const allSorted = [...allMatches].sort(sortFn);
 
-  // Séparateur + prédictions non-misées
-  if (preds.length) {
-    html += `<tr><td colspan="7" style="padding:6px 10px;background:var(--bg3);font-size:11px;color:var(--text-dim);font-style:italic;border-top:2px solid var(--border)">
-      Prédictions analysées (non misées) — ${preds.length} entrée${preds.length > 1 ? 's' : ''}
-    </td></tr>`;
-    const sortedPreds = [...preds].sort(sortFn);
-    sortedPreds.forEach((p, i) => { html += makeRow(p, bets.length + i + 1, false); });
-  }
+  let rank = 1;
+  allSorted.forEach(p => {
+    if (p.is_bet) {
+      // Match avec pari misé
+      html += makeRow(p, rank, true);
+    } else if (p.bet_type) {
+      // Prédiction analysée (sans mise)
+      html += makeRow(p, rank, false);
+    } else {
+      // Match simple sans pari — affichage simplifié
+      const scoreHtml = p.score_str
+        ? `<div class="live-score pre">${p.score_str}</div>`
+        : '';
+      html += `
+        <tr style="opacity:0.60">
+          <td style="text-align:center"><span style="color:var(--text-dim);font-size:13px">—</span></td>
+          <td class="match-cell">
+            ${mlbMatchLogosHtml(p.away_team, p.home_team)}
+            ${scoreHtml ? `<div style="text-align:center;margin-top:4px">${scoreHtml}</div>` : ''}
+          </td>
+          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
+          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
+          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
+          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
+          <td class="center"><span style="color:var(--text-dim);font-size:11px">Aucun pari</span></td>
+        </tr>`;
+    }
+    rank++;
+  });
 
   html += `</tbody></table></div></div>`;
   return html;

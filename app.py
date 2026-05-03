@@ -68,8 +68,11 @@ DEFAULT_BANKROLL     = None  # Pas de bankroll fixe — on utilise max_nightly d
 DEFAULT_KELLY_FRAC   = 0.25
 DEFAULT_MAX_NIGHTLY  = 10.0   # Mise maximale par soir en $
 
-_SNAPSHOT_PATH = os.path.join(os.path.dirname(__file__), "snapshot.json")
-_SNAPSHOTS_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
+# Répertoire persistant : /data sur Fly.io (volume monté), sinon dossier local
+_DATA_DIR           = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+_SNAPSHOT_PATH      = os.path.join(_DATA_DIR, "snapshot.json")
+_SNAPSHOTS_DIR      = os.path.join(_DATA_DIR, "snapshots")
+_AUTO_SNAPSHOT_LOCK = os.path.join(_DATA_DIR, "last_auto_snapshot.txt")
 
 
 def _check_date_rollover():
@@ -492,6 +495,148 @@ def api_save_snapshot():
 
     print(f"  >> Snapshot MLB sauvegardé : {len(snapshot['picks'])} paris à {snapshot['time']}")
     return jsonify({"ok": True, "saved": len(snapshot["picks"]), "time": snapshot["time"]})
+
+
+# ─── Cron auto-snapshot (request-driven, idempotent) ──────────────────────────
+
+@app.route("/api/cron/auto-snapshot", methods=["GET", "POST"])
+def api_cron_auto_snapshot():
+    """Endpoint cron déclenché par UptimeRobot (~5 min). Idempotent.
+
+    Logique :
+    1. Lit la lockfile → skip si déjà fait aujourd'hui
+    2. Récupère les opportunités du jour depuis le cache
+    3. Calcule l'heure cible = premier match - 30 min
+    4. Si now >= target ET pas fait → sauvegarde snapshot
+    5. Écrit la lockfile (idempotence)
+
+    Avantage vs thread Python : exécuté à chaque requête HTTP, donc tolère
+    le sleep des plateformes (Fly.io auto_stop_machines).
+    """
+    today   = _today_mtl()
+    now_mtl = _now_mtl()
+
+    # 1. Lock : déjà fait aujourd'hui ?
+    if os.path.exists(_AUTO_SNAPSHOT_LOCK):
+        try:
+            with open(_AUTO_SNAPSHOT_LOCK) as f:
+                last_date = f.read().strip()
+            if last_date == today:
+                return jsonify({
+                    "ok":      True,
+                    "skipped": "already_done_today",
+                    "last_date": last_date,
+                    "now":     now_mtl.strftime("%Y-%m-%d %H:%M MTL"),
+                })
+        except Exception:
+            pass
+
+    # 2. Picks du jour depuis le cache en mémoire
+    cached_data  = (_cache.get("data") or {})
+    all_opps     = cached_data.get("opportunities") or []
+    today_picks  = [p for p in all_opps if p.get("date") == today]
+
+    if not today_picks:
+        # Si le cache est vide, lancer une analyse en arrière-plan pour le peupler
+        if _cache.get("status") not in ("running", "ready"):
+            try:
+                _start_analysis_thread(
+                    bankroll=DEFAULT_BANKROLL,
+                    kelly_frac=DEFAULT_KELLY_FRAC,
+                    max_nightly=DEFAULT_MAX_NIGHTLY,
+                    top_n=50,
+                )
+            except Exception:
+                pass
+        return jsonify({
+            "ok":      True,
+            "skipped": "no_picks_today",
+            "cache_status": _cache.get("status"),
+            "now":     now_mtl.strftime("%Y-%m-%d %H:%M MTL"),
+        })
+
+    # 3. Heure du premier match → calcul de la fenêtre cible (30 min avant)
+    times = sorted({p.get("time") for p in today_picks if p.get("time")})
+    if not times:
+        return jsonify({"ok": True, "skipped": "no_match_times"})
+
+    first_time = times[0]  # ex. "19:07"
+    try:
+        h, m = map(int, first_time.split(":"))
+        target = now_mtl.replace(hour=h, minute=m, second=0, microsecond=0) - timedelta(minutes=30)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"format heure invalide: {first_time} — {e}"}), 400
+
+    if now_mtl < target:
+        return jsonify({
+            "ok":      True,
+            "skipped": "before_target_window",
+            "now":     now_mtl.strftime("%H:%M"),
+            "target":  target.strftime("%H:%M"),
+            "first_match": first_time,
+            "minutes_until": int((target - now_mtl).total_seconds() // 60),
+        })
+
+    # 4. Déclenchement : construire et sauvegarder le snapshot
+    try:
+        snapshot = {
+            "saved_at":   now_mtl.isoformat(),
+            "date":       today,
+            "time":       now_mtl.strftime("%H:%M"),
+            "auto":       True,
+            "first_match": first_time,
+            "picks": [
+                {
+                    "key":            p.get("key", ""),
+                    "match":          p.get("match", ""),
+                    "home_team":      p.get("home_team", ""),
+                    "away_team":      p.get("away_team", ""),
+                    "selection":      p.get("selection_label", p.get("selection", "")),
+                    "bet_type":       p.get("bet_type", ""),
+                    "odds":           p.get("odds"),
+                    "fair_prob":      p.get("fair_prob"),
+                    "value_score":    p.get("value_score"),
+                    "mise":           p.get("mise"),
+                    "recommendation": p.get("recommendation", ""),
+                    "is_bet":         bool(p.get("mise")),
+                    "factor_scores":  p.get("factor_scores", {}),
+                    "weather":        p.get("weather", {}),
+                }
+                for p in today_picks
+            ],
+        }
+
+        # Snapshot courant (snapshot.json)
+        os.makedirs(_DATA_DIR, exist_ok=True)
+        with open(_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=2)
+
+        # Snapshot historique (snapshots/YYYY-MM-DD.json)
+        os.makedirs(_SNAPSHOTS_DIR, exist_ok=True)
+        daily_path = os.path.join(_SNAPSHOTS_DIR, f"{today}.json")
+        with open(daily_path, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=2)
+
+        print(f"  [auto-snapshot] {len(today_picks)} picks sauvegardés à {snapshot['time']} MTL (1er match: {first_time})")
+
+        # 5. Lock pour idempotence
+        try:
+            with open(_AUTO_SNAPSHOT_LOCK, "w") as f:
+                f.write(today)
+        except Exception as lock_err:
+            print(f"  [auto-snapshot] Lock write erreur: {lock_err}")
+
+        return jsonify({
+            "ok":             True,
+            "snapshot_saved": True,
+            "picks_count":    len(today_picks),
+            "first_match":    first_time,
+            "snapshot_time":  snapshot["time"],
+        })
+
+    except Exception as e:
+        print(f"  [auto-snapshot] ERREUR: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 def _resolve_combos(combos_raw: list, mlb_results: dict) -> list:
@@ -1388,7 +1533,7 @@ def _resolve_live(pick: dict, home_score: int, away_score: int,
 def api_mlb_live():
     """Snapshot du jour + résultats/scores MLB en temps réel via statsapi."""
     from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
-    today = __today_mtl()
+    today = _today_mtl()
 
     # Charger le snapshot du jour
     snap = None
@@ -1407,10 +1552,12 @@ def api_mlb_live():
 
     # Scores MLB en direct via statsapi — indexé par team_id pour matching robuste
     game_scores = {}   # str(team_id) → entry
+    total_games = 0
     try:
         import statsapi
         from mlb_stats import _find_team_id
         games = statsapi.schedule(sportId=1, date=today)
+        total_games = len(games)
         for g in games:
             home      = g.get("home_name", "")
             away      = g.get("away_name", "")
@@ -1481,10 +1628,13 @@ def api_mlb_live():
                 return entry
         return None
 
-    # Enrichir tous les picks du snapshot
-    picks_out = []
+    # Construire la liste complète des matchs du jour : picks + autres matchs
+    all_matches = []
     wins = losses = pending = 0
     net = 0.0
+    matched_games = set()
+
+    # 1. Ajouter les picks du snapshot (enrichis avec scores)
     for pick in snap.get("picks", []):
         home = (pick.get("home_team") or "")
         away = (pick.get("away_team") or "")
@@ -1510,6 +1660,7 @@ def api_mlb_live():
                     pick, game["home_score"], game["away_score"],
                     game["home_name"], game["away_name"],
                 )
+            matched_games.add((game["home_name"], game["away_name"]))
 
         is_bet = pick.get("is_bet", bool(pick.get("mise", 0)))
         mise   = (pick.get("mise") or 0.0) if is_bet else 0.0
@@ -1526,7 +1677,7 @@ def api_mlb_live():
                 pending += 1
         net += profit
 
-        picks_out.append({
+        all_matches.append({
             **pick,
             "outcome":     outcome,
             "score_str":   score_str,
@@ -1535,15 +1686,69 @@ def api_mlb_live():
             "is_bet":      is_bet,
         })
 
+    # 2. Ajouter les autres matchs du jour (sans paris)
+    try:
+        import statsapi
+        games = statsapi.schedule(sportId=1, date=today)
+        for g in games:
+            home = g.get("home_name", "")
+            away = g.get("away_name", "")
+            # Passer si ce match a déjà des picks
+            if (home, away) in matched_games:
+                continue
+
+            home_score = g.get("home_score") or 0
+            away_score = g.get("away_score") or 0
+            status = g.get("status", "")
+            inning = g.get("current_inning", "")
+            inning_half = g.get("inning_state", "")
+            start_utc = g.get("game_datetime", "")
+
+            state = "pre"
+            if status in ("Final", "Game Over", "Completed Early"):
+                state = "final"
+            elif status in ("In Progress", "Manager challenge", "Critical"):
+                state = "live"
+            elif status in ("Postponed", "Cancelled", "Suspended"):
+                state = "postponed"
+
+            score_str = ""
+            if state == "final":
+                score_str = f"Final {away_score}–{home_score}"
+            elif state == "live":
+                half = "Haut" if inning_half in ("Top", "Mid") else "Bas"
+                score_str = f"{half} {inning}e — {away_score}–{home_score}"
+            elif state == "postponed":
+                score_str = "Reporté"
+            else:  # pre
+                try:
+                    dt = _datetime.fromisoformat(start_utc.replace("Z", "+00:00"))
+                    local = dt - _timedelta(hours=4)
+                    score_str = local.strftime("Débute à %H h %M")
+                except Exception:
+                    score_str = "À venir"
+
+            all_matches.append({
+                "match":       f"{away} @ {home}",
+                "away_team":   away,
+                "home_team":   home,
+                "score_str":   score_str,
+                "state":       state,
+                "is_bet":      False,
+            })
+    except Exception as e:
+        print(f"  [mlb-live] Erreur pour autres matchs: {e}")
+
     return jsonify({
-        "date":       snap.get("date"),
-        "time":       snap.get("time"),
-        "picks":      picks_out,
-        "wins":       wins,
-        "losses":     losses,
-        "pending":    pending,
-        "net":        round(net, 2),
-        "fetched_at": __now_mtl().strftime("%H:%M:%S"),
+        "date":           snap.get("date"),
+        "time":           snap.get("time"),
+        "all_matches":    all_matches,
+        "wins":           wins,
+        "losses":         losses,
+        "pending":        pending,
+        "net":            round(net, 2),
+        "total_matches":  total_games,
+        "fetched_at":     _now_mtl().strftime("%H:%M:%S"),
     })
 
 
@@ -2218,6 +2423,62 @@ def api_compare_systems():
     })
 
 
+def _get_mlb_team_logo(team_name: str) -> str:
+    """Retourne l'URL du logo ESPN pour une équipe MLB."""
+    if not team_name:
+        return ""
+
+    # Mapping vers abréviations ESPN/MLB (matching le template)
+    abbrev_map = {
+        "orioles": "BAL", "baltimore": "BAL",
+        "red sox": "BOS", "boston": "BOS",
+        "cubs": "CHC", "chicago cubs": "CHC", "chicago": "CHC",
+        "white sox": "CWS",
+        "reds": "CIN", "cincinnati": "CIN",
+        "guardians": "CLE", "cleveland": "CLE",
+        "rockies": "COL", "colorado": "COL",
+        "tigers": "DET", "detroit": "DET",
+        "astros": "HOU", "houston": "HOU",
+        "royals": "KC", "kansas city": "KC",
+        "angels": "LAA", "los angeles angels": "LAA", "los angeles": "LAD",
+        "dodgers": "LAD", "los angeles dodgers": "LAD",
+        "marlins": "MIA", "miami": "MIA",
+        "brewers": "MIL", "milwaukee": "MIL",
+        "twins": "MIN", "minnesota": "MIN",
+        "mets": "NYM", "new york mets": "NYM",
+        "yankees": "NYY", "new york yankees": "NYY", "new york": "NYY",
+        "athletics": "OAK", "oakland": "OAK",
+        "phillies": "PHI", "philadelphia": "PHI", "philadelphie": "PHI",
+        "pirates": "PIT", "pittsburgh": "PIT",
+        "cardinals": "STL", "st. louis": "STL", "saint-louis": "STL", "st louis": "STL",
+        "padres": "SD", "san diego": "SD",
+        "giants": "SF", "san francisco": "SF",
+        "mariners": "SEA", "seattle": "SEA",
+        "rays": "TB", "tampa bay": "TB",
+        "rangers": "TEX", "texas": "TEX",
+        "blue jays": "TOR", "toronto": "TOR",
+        "nationals": "WSH", "washington": "WSH",
+        "diamondbacks": "ARI", "arizona": "ARI",
+        "braves": "ATL", "atlanta": "ATL",
+    }
+
+    # Normaliser et chercher
+    s = team_name.lower().strip()
+    abbrev = abbrev_map.get(s)
+
+    if not abbrev:
+        # Chercher par substring
+        for key, val in abbrev_map.items():
+            if key in s or s in key:
+                abbrev = val
+                break
+
+    if abbrev:
+        return f"https://a.espncdn.com/i/teamlogos/mlb/500/{abbrev}.png"
+
+    return ""
+
+
 def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
                    max_nightly: float = None, all_picks=None, mode: str = "standard") -> dict:
     """Construit le dict JSON retourné au frontend."""
@@ -2266,10 +2527,16 @@ def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
             "description":   w.get("description", ""),
         } if w else {}
 
+        # Ajouter les logos MLB
+        away_logo = _get_mlb_team_logo(opp.match.away_team)
+        home_logo = _get_mlb_team_logo(opp.match.home_team)
+
         opp_list.append({
             "match":          f"{opp.match.away_team} @ {opp.match.home_team}",
             "away_team":      opp.match.away_team,
             "home_team":      opp.match.home_team,
+            "away_logo":      away_logo,
+            "home_logo":      home_logo,
             "date":           opp.match.date,
             "time":           opp.match.time,
             "league":         opp.league,
@@ -2331,10 +2598,16 @@ def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
                 "is_dome":       w.get("is_dome", False),
                 "precip_prob":   w.get("precip_prob"),
             } if w else {}
+            # Ajouter les logos MLB
+            away_logo_i = _get_mlb_team_logo(opp.match.away_team)
+            home_logo_i = _get_mlb_team_logo(opp.match.home_team)
+
             info_list.append({
                 "match":          f"{opp.match.away_team} @ {opp.match.home_team}",
                 "away_team":      opp.match.away_team,
                 "home_team":      opp.match.home_team,
+                "away_logo":      away_logo_i,
+                "home_logo":      home_logo_i,
                 "date":           opp.match.date,
                 "time":           opp.match.time,
                 "league":         opp.league,
@@ -2372,45 +2645,106 @@ def _build_payload(opps, matches, bankroll: float, kelly_frac: float,
             "current_inning":  getattr(m, 'current_inning', ''),
         }
 
+    # ── Carousel : TOUS les matchs MLB du jour depuis MLB.com (indépendant de Loto-Québec) ──
     carousel_list = []
     seen_carousel = set()
-    # 1) Opps d'aujourd'hui en premier
-    for o in opp_list:
-        if o.get("date") and o["date"] != today_mtl:
-            continue
-        ck = (o["home_team"], o["away_team"])
-        if ck in seen_carousel:
-            continue
-        seen_carousel.add(ck)
-        live = live_by_key.get(ck, {})
-        carousel_list.append({**o, **live})
 
-    # 2) Matchs sans cotes (info-only) d'aujourd'hui
-    for m in matches:
-        if m.date != today_mtl:
-            continue
-        ck = (m.home_team, m.away_team)
-        if ck in seen_carousel:
-            continue
-        seen_carousel.add(ck)
-        carousel_list.append({
-            "match":           f"{m.away_team} @ {m.home_team}",
-            "away_team":       m.away_team,
-            "home_team":       m.home_team,
-            "date":            m.date,
-            "time":            m.time,
-            "odds":            0,
-            "recommendation":  "—",
-            "event_url":       m.event_url,
-            "live_status":     getattr(m, 'live_status', ''),
-            "detailed_status": getattr(m, 'detailed_status', ''),
-            "away_score":      getattr(m, 'away_score', 0),
-            "home_score":      getattr(m, 'home_score', 0),
-            "current_inning":  getattr(m, 'current_inning', ''),
-        })
+    try:
+        import statsapi
+        from scraper import _normalize_team_name_mlb
+        mlb_games = statsapi.schedule(sportId=1, date=today_mtl)
+        for g in mlb_games:
+            away_raw = g.get("away_name", "")
+            home_raw = g.get("home_name", "")
+            away = _normalize_team_name_mlb(away_raw)
+            home = _normalize_team_name_mlb(home_raw)
+            ck = (home, away)
+            if ck in seen_carousel:
+                continue
+            seen_carousel.add(ck)
 
-    # Trier par heure de match (chronologique)
-    carousel_list.sort(key=lambda x: (x.get("time") or "99:99"))
+            # Scores & état
+            hs = g.get("home_score") or 0
+            as_ = g.get("away_score") or 0
+            status = g.get("status", "")
+            inning = g.get("current_inning", "")
+            inning_state = g.get("inning_state", "")
+            start_utc = g.get("game_datetime", "")
+
+            if status in ("Final", "Game Over", "Completed Early"):
+                live_status = "Final"
+                current_inning = "Final"
+            elif status in ("In Progress", "Manager challenge", "Critical"):
+                live_status = "Live"
+                half = "Haut" if inning_state in ("Top", "Mid") else "Bas"
+                current_inning = f"{half} {inning}" if inning else "En cours"
+            elif status in ("Postponed", "Cancelled", "Suspended"):
+                live_status = "Postponed"
+                current_inning = "Reporté"
+            else:
+                live_status = "Preview"
+                current_inning = ""
+
+            # Heure locale Montréal
+            time_str = ""
+            try:
+                dt = datetime.fromisoformat(start_utc.replace("Z", "+00:00"))
+                local = dt.replace(tzinfo=None) - _td(hours=4)
+                time_str = local.strftime("%H:%M")
+            except Exception:
+                pass
+
+            # Vérifier si ce match a des cotes analysées (pour garder les infos)
+            live_data = live_by_key.get(ck, {})
+            carousel_list.append({
+                "match":           f"{away} @ {home}",
+                "away_team":       away,
+                "home_team":       home,
+                "date":            today_mtl,
+                "time":            time_str,
+                "odds":            0,
+                "recommendation":  "—",
+                "event_url":       "",
+                "live_status":     live_status,
+                "detailed_status": status,
+                "away_score":      as_,
+                "home_score":      hs,
+                "current_inning":  current_inning,
+            })
+    except Exception as e:
+        print(f"  [carousel] Erreur statsapi: {e}")
+        # Fallback : utiliser les matchs du scraper
+        for m in matches:
+            ck = (m.home_team, m.away_team)
+            if ck in seen_carousel:
+                continue
+            seen_carousel.add(ck)
+            carousel_list.append({
+                "match":           f"{m.away_team} @ {m.home_team}",
+                "away_team":       m.away_team,
+                "home_team":       m.home_team,
+                "date":            m.date,
+                "time":            m.time,
+                "odds":            0,
+                "recommendation":  "—",
+                "event_url":       m.event_url,
+                "live_status":     getattr(m, 'live_status', ''),
+                "detailed_status": getattr(m, 'detailed_status', ''),
+                "away_score":      getattr(m, 'away_score', 0),
+                "home_score":      getattr(m, 'home_score', 0),
+                "current_inning":  getattr(m, 'current_inning', ''),
+            })
+
+    # Trier : matchs en cours d'abord, puis par heure
+    # Status priority: Live=0, Preview=1, Final=2, Postponed=3
+    def sort_key(m):
+        status = m.get("live_status", "").lower()
+        status_order = {"live": 0, "preview": 1, "final": 2, "postponed": 3}
+        status_priority = status_order.get(status, 99)
+        time_str = m.get("time") or "99:99"
+        return (status_priority, time_str)
+
+    carousel_list.sort(key=sort_key)
 
     return {
         "opportunities":      opp_list,
