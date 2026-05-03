@@ -2842,6 +2842,47 @@ def api_change_password():
     return jsonify({"success": True, "message": "Mot de passe changé avec succès"})
 
 
+# ─── Upload Snapshots (pour initialiser les stats en prod) ────────────────────
+
+@app.route('/api/upload-snapshots', methods=['POST'])
+@login_required
+def api_upload_snapshots():
+    """Upload un fichier tar.gz contenant les snapshots et l'extrait dans /data/snapshots/"""
+    import tarfile
+
+    if 'file' not in request.files:
+        return jsonify({"error": "Aucun fichier fourni"}), 400
+
+    file = request.files['file']
+    if not file or not file.filename.endswith('.tar.gz'):
+        return jsonify({"error": "Le fichier doit être un tar.gz"}), 400
+
+    try:
+        # Sauvegarder temporairement le fichier
+        temp_path = os.path.join(_DATA_DIR, "snapshots-upload.tar.gz")
+        file.save(temp_path)
+
+        # Extraire dans /data/snapshots/
+        os.makedirs(_SNAPSHOTS_DIR, exist_ok=True)
+        with tarfile.open(temp_path, "r:gz") as tar:
+            tar.extractall(path=_DATA_DIR)
+
+        # Nettoyer
+        os.remove(temp_path)
+
+        # Compter les fichiers importés
+        snap_count = len([f for f in os.listdir(_SNAPSHOTS_DIR) if f.endswith(".json")])
+
+        print(f"  [upload-snapshots] {snap_count} snapshots importés depuis {file.filename}")
+        return jsonify({
+            "ok": True,
+            "message": f"{snap_count} snapshots importés avec succès",
+            "snapshots_count": snap_count
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ─── Lancement ────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':

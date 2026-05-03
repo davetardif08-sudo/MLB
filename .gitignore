@@ -52,3 +52,4 @@ ehthumbs.db
 # Playwright
 .cache/
 ms-playwright/
+snapshots/
