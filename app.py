@@ -2845,10 +2845,21 @@ def api_change_password():
 # ─── Upload Snapshots (pour initialiser les stats en prod) ────────────────────
 
 @app.route('/api/upload-snapshots', methods=['POST'])
-@login_required
 def api_upload_snapshots():
-    """Upload un fichier tar.gz contenant les snapshots et l'extrait dans /data/snapshots/"""
+    """Upload un fichier tar.gz contenant les snapshots et l'extrait dans /data/snapshots/
+
+    Authentification via token query param: ?token=SECRET_TOKEN
+    ou via Authorization header: Authorization: Bearer SECRET_TOKEN
+    """
     import tarfile
+
+    # Vérifier le token
+    secret_token = os.environ.get('UPLOAD_TOKEN', 'mlb-upload-secret-2024')
+    provided_token = request.args.get('token') or \
+                     request.headers.get('Authorization', '').replace('Bearer ', '')
+
+    if provided_token != secret_token:
+        return jsonify({"error": "Token invalide"}), 401
 
     if 'file' not in request.files:
         return jsonify({"error": "Aucun fichier fourni"}), 400
