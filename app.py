@@ -73,6 +73,7 @@ _DATA_DIR           = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 _SNAPSHOT_PATH      = os.path.join(_DATA_DIR, "snapshot.json")
 _SNAPSHOTS_DIR      = os.path.join(_DATA_DIR, "snapshots")
 _AUTO_SNAPSHOT_LOCK = os.path.join(_DATA_DIR, "last_auto_snapshot.txt")
+_AUTO_REFRESH_LOCK  = os.path.join(_DATA_DIR, "last_auto_refresh.txt")
 
 
 def _check_date_rollover():
@@ -517,6 +518,38 @@ def api_cron_auto_snapshot():
     """
     today   = _today_mtl()
     now_mtl = _now_mtl()
+
+    # 0. Re-scrape automatique à 10:00-10:10 MTL (idempotent par jour)
+    # Mise-O-Jeu publie les matchs progressivement le matin ; on re-scrape
+    # vers 10h pour s'assurer d'avoir tous les matchs avant le snapshot.
+    refresh_done_today = False
+    if os.path.exists(_AUTO_REFRESH_LOCK):
+        try:
+            with open(_AUTO_REFRESH_LOCK) as f:
+                refresh_done_today = (f.read().strip() == today)
+        except Exception:
+            pass
+
+    if not refresh_done_today and 10 <= now_mtl.hour < 11 and now_mtl.minute < 10:
+        try:
+            print(f"  [auto-refresh] Re-scraping à {now_mtl.strftime('%H:%M')} MTL pour capturer tous les matchs du jour")
+            # Vider le cache et lancer une nouvelle analyse en arrière-plan
+            with _lock:
+                _cache["status"] = "idle"
+                _cache["data"]   = None
+                _cache["date"]   = None
+            _start_analysis_thread(
+                bankroll=DEFAULT_BANKROLL,
+                kelly_frac=DEFAULT_KELLY_FRAC,
+                max_nightly=DEFAULT_MAX_NIGHTLY,
+                top_n=50,
+            )
+            # Lock pour idempotence
+            with open(_AUTO_REFRESH_LOCK, "w") as f:
+                f.write(today)
+            print(f"  [auto-refresh] Lock écrit, prochaine exécution demain")
+        except Exception as e:
+            print(f"  [auto-refresh] ERREUR: {e}")
 
     # 1. Lock : déjà fait aujourd'hui ?
     if os.path.exists(_AUTO_SNAPSHOT_LOCK):
