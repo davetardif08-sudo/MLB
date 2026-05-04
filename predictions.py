@@ -294,11 +294,13 @@ def get_feature_weights(sport: str = "baseball") -> dict:
     if cal.get("status") != "ok":
         return _DEFAULT_WEIGHTS
 
-    # Ajustement simple : si win_rate > pred_prob → augmenter stat_vs_math
+    # Correction calibration : si win_rate < pred_prob (bias < 0), augmenter stat_vs_math
+    # Logique : si on perd plus qu'on gagne, c'est que les stats sont meilleures que le marché
+    # → augmenter la confiance en stats (diminuer dépendance aux cotes)
     bias = cal.get("calibration_bias", 0.0)
     new_weights = {
         "stat_vs_math": max(0.30, min(0.70,
-            _DEFAULT_WEIGHTS["stat_vs_math"] + bias * 0.5)),
+            _DEFAULT_WEIGHTS["stat_vs_math"] - bias * 0.5)),  # Inverser: -bias au lieu de +bias
         "intra_stat": _DEFAULT_WEIGHTS["intra_stat"].copy(),
     }
 
