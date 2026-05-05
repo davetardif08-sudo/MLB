@@ -3135,21 +3135,37 @@ function mlbLiveCard(p) {
   const awayLogo = awayAbbrev ? `https://a.espncdn.com/i/teamlogos/mlb/500/${awayAbbrev}.png` : '';
   const homeLogo = homeAbbrev ? `https://a.espncdn.com/i/teamlogos/mlb/500/${homeAbbrev}.png` : '';
 
-  // ── Déterminer équipe gagnante et colorer les cercles ──
+  // ── Déterminer couleur des cercles (comme dans Bets) ──
   let awayCircleClass = '', homeCircleClass = '';
-  const scoreStr = p.score_str || '';
-  const scoreMatch = scoreStr.match(/(\d+)-(\d+)/);
+  const betType = (p.bet_type || '').toLowerCase();
+  const selection = (p.selection || '').toLowerCase();
+  const awayTeamLower = (p.away_team || '').toLowerCase();
+  const homeTeamLower = (p.home_team || '').toLowerCase();
 
-  if (scoreMatch) {
-    const awayScore = parseInt(scoreMatch[1]);
-    const homeScore = parseInt(scoreMatch[2]);
-    if (awayScore > homeScore) {
+  // Vérifier si c'est un pari Moneyline (2 issues / Gagnant)
+  const isMoneyline = betType.includes('gagnant') || betType.includes('victoire') ||
+                      betType.includes('moneyline') || betType.includes('2 issues');
+
+  // Vérifier si c'est un pari Total (Over/Under)
+  const isTotal = betType.includes('total') || betType.includes('plus/moins') ||
+                  betType.includes('over') || betType.includes('under');
+
+  if (isMoneyline) {
+    // Moneyline: sélection = vert, autre = gris
+    const selectionIsAway = selection.includes(awayTeamLower) || awayTeamLower.includes(selection);
+    const selectionIsHome = selection.includes(homeTeamLower) || homeTeamLower.includes(selection);
+
+    if (selectionIsAway) {
       awayCircleClass = 'win';
       homeCircleClass = 'lose';
-    } else if (homeScore > awayScore) {
-      awayCircleClass = 'lose';
+    } else if (selectionIsHome) {
       homeCircleClass = 'win';
+      awayCircleClass = 'lose';
     }
+  } else if (isTotal) {
+    // Total Over/Under: les deux équipes en vert (c'est un pari sur le total, pas une équipe)
+    awayCircleClass = 'over';
+    homeCircleClass = 'over';
   }
 
   // ── Outcome et couleur ──
