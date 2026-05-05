@@ -3135,6 +3135,23 @@ function mlbLiveCard(p) {
   const awayLogo = awayAbbrev ? `https://a.espncdn.com/i/teamlogos/mlb/500/${awayAbbrev}.png` : '';
   const homeLogo = homeAbbrev ? `https://a.espncdn.com/i/teamlogos/mlb/500/${homeAbbrev}.png` : '';
 
+  // ── Déterminer équipe gagnante et colorer les cercles ──
+  let awayCircleClass = '', homeCircleClass = '';
+  const scoreStr = p.score_str || '';
+  const scoreMatch = scoreStr.match(/(\d+)-(\d+)/);
+
+  if (scoreMatch) {
+    const awayScore = parseInt(scoreMatch[1]);
+    const homeScore = parseInt(scoreMatch[2]);
+    if (awayScore > homeScore) {
+      awayCircleClass = 'win';
+      homeCircleClass = 'lose';
+    } else if (homeScore > awayScore) {
+      awayCircleClass = 'lose';
+      homeCircleClass = 'win';
+    }
+  }
+
   // ── Outcome et couleur ──
   let outcomeIcon = '⏳', outcomeText = 'Attente', outcomeColor = 'var(--text-dim)';
   if (p.outcome === 'win') {
@@ -3160,10 +3177,10 @@ function mlbLiveCard(p) {
     <div class="prediction-card" style="opacity:${p.is_bet ? 1 : 0.72}">
       <div class="card-header">
         <div class="team-logos" style="justify-content:center;gap:20px">
-          <div class="logo-circle">
+          <div class="logo-circle ${awayCircleClass}">
             ${awayLogo ? `<img class="card-logo" src="${awayLogo}" alt="${p.away_team}" onerror="this.style.display='none'">` : ''}
           </div>
-          <div class="logo-circle">
+          <div class="logo-circle ${homeCircleClass}">
             ${homeLogo ? `<img class="card-logo" src="${homeLogo}" alt="${p.home_team}" onerror="this.style.display='none'">` : ''}
           </div>
         </div>
@@ -3199,9 +3216,14 @@ function renderLive(data) {
   const netCls = net >= 0 ? 'gain-pos' : 'gain-neg';
   const totalMatches = data.total_matches ?? 0;
 
-  // Trier : live en premier, puis win/loss, puis pending
-  const order = { live: 0, win: 1, loss: 2, pending: 3 };
-  const sortFn = (a, b) => (order[a.outcome] ?? 9) - (order[b.outcome] ?? 9);
+  // Trier : paris (is_bet) en premier, puis par outcome (live, win, loss, pending)
+  const outcomeOrder = { live: 0, win: 1, loss: 2, pending: 3 };
+  const sortFn = (a, b) => {
+    // D'abord : paris (is_bet=true) avant prédictions (is_bet=false)
+    if (a.is_bet !== b.is_bet) return b.is_bet ? -1 : 1;
+    // Puis : par outcome
+    return (outcomeOrder[a.outcome] ?? 9) - (outcomeOrder[b.outcome] ?? 9);
+  };
   const allSorted = [...allMatches].sort(sortFn);
 
   // ── En-tête résumé + grille de cartes ──
