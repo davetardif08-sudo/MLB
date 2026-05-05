@@ -3128,6 +3128,68 @@ async function loadLive(showSpinner = true) {
   }
 }
 
+function mlbLiveCard(p) {
+  // ── Logos ──
+  const awayAbbrev = mlbTeamAbbrev(p.away_team || '');
+  const homeAbbrev = mlbTeamAbbrev(p.home_team || '');
+  const awayLogo = awayAbbrev ? `https://a.espncdn.com/i/teamlogos/mlb/500/${awayAbbrev}.png` : '';
+  const homeLogo = homeAbbrev ? `https://a.espncdn.com/i/teamlogos/mlb/500/${homeAbbrev}.png` : '';
+
+  // ── Outcome et couleur ──
+  let outcomeIcon = '⏳', outcomeText = 'Attente', outcomeColor = 'var(--text-dim)';
+  if (p.outcome === 'win') {
+    outcomeIcon = '✓'; outcomeText = 'Victoire'; outcomeColor = 'var(--win)';
+  } else if (p.outcome === 'loss') {
+    outcomeIcon = '✗'; outcomeText = 'Défaite'; outcomeColor = 'var(--loss)';
+  } else if (p.outcome === 'push') {
+    outcomeIcon = '→'; outcomeText = 'Nul'; outcomeColor = 'var(--push)';
+  } else if (p.outcome === 'live') {
+    outcomeIcon = '●'; outcomeText = 'En cours'; outcomeColor = 'var(--mlb)';
+  }
+
+  // ── Profit ──
+  const odds = p.odds || 2.0;
+  const mise = p.mise || 0;
+  const profit = mise * (odds - 1);
+  const profitColor = profit > 0 ? 'var(--green)' : profit < 0 ? 'var(--red)' : 'var(--text-dim)';
+  const profitDisplay = p.is_bet
+    ? (profit >= 0 ? '+$' : '-$') + Math.abs(profit).toFixed(2)
+    : '—';
+
+  return `
+    <div class="prediction-card" style="opacity:${p.is_bet ? 1 : 0.72}">
+      <div class="card-header">
+        <div class="team-logos" style="justify-content:center;gap:20px">
+          <div class="logo-circle">
+            ${awayLogo ? `<img class="card-logo" src="${awayLogo}" alt="${p.away_team}" onerror="this.style.display='none'">` : ''}
+          </div>
+          <div class="logo-circle">
+            ${homeLogo ? `<img class="card-logo" src="${homeLogo}" alt="${p.home_team}" onerror="this.style.display='none'">` : ''}
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:12px;color:var(--mlb);font-weight:600;margin:8px 0 4px">${p.bet_type || ''}</div>
+      <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-bottom:8px">${p.score_str || '—'}</div>
+      <div class="card-body">
+        <div class="card-stats-row">
+          <div class="cote">
+            <div class="label">Cote</div>
+            <div class="value">${odds.toFixed(2)}</div>
+          </div>
+          <div class="mise">
+            <div class="label">Mise</div>
+            <div class="value">${p.is_bet ? '$' + mise.toFixed(2) : '—'}</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid #e5e7eb">
+          <div style="font-weight:600;font-size:13px;color:${outcomeColor}">${outcomeIcon} ${outcomeText}</div>
+          <div style="font-size:12px;color:${profitColor};font-weight:600;margin-top:4px">${profitDisplay}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderLive(data) {
   const allMatches = data.all_matches || [];
   const bets  = allMatches.filter(p => p.is_bet);
@@ -3137,8 +3199,13 @@ function renderLive(data) {
   const netCls = net >= 0 ? 'gain-pos' : 'gain-neg';
   const totalMatches = data.total_matches ?? 0;
 
-  // En-tête résumé
-  let html = `
+  // Trier : live en premier, puis win/loss, puis pending
+  const order = { live: 0, win: 1, loss: 2, pending: 3 };
+  const sortFn = (a, b) => (order[a.outcome] ?? 9) - (order[b.outcome] ?? 9);
+  const allSorted = [...allMatches].sort(sortFn);
+
+  // ── En-tête résumé + grille de cartes ──
+  return `
   <div style="padding:20px 24px">
     <div class="live-header">
       <div class="live-summary">
@@ -3173,119 +3240,11 @@ function renderLive(data) {
       </div>
     </div>
 
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:30px">#</th>
-            <th>MATCH / TYPE DE PARI</th>
-            <th class="center" style="width:80px">SÉLECTION</th>
-            <th class="center" style="width:65px">COTE</th>
-            <th class="center" style="width:70px">MISE</th>
-            <th class="center" style="width:110px">GAIN/PERTE</th>
-            <th class="center" style="width:140px">RÉSULTAT</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div class="cards-wrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin-top:20px">
+      ${allSorted.map(p => mlbLiveCard(p)).join('')}
+    </div>
+  </div>
   `;
-
-  // Trier : live en premier, puis win/loss, puis pending
-  const order = { live: 0, win: 1, loss: 2, pending: 3 };
-  const sortFn = (a, b) => (order[a.outcome] ?? 9) - (order[b.outcome] ?? 9);
-
-  function makeRow(p, rank, isBet) {
-    const medal = rank === 1 ? '<span class="medal-1">&#127947;</span>'
-                : rank === 2 ? '<span class="medal-2">&#127948;</span>'
-                : rank === 3 ? '<span class="medal-3">&#127949;</span>'
-                : `<span style="color:var(--text-dim);font-size:13px">${rank}</span>`;
-
-    const odds  = p.odds || 2.0;
-    const mise  = isBet ? (p.mise || 0) : 0;
-    const oddsClass = odds <= 1.60 ? 'odds-low' : odds <= 2.20 ? 'odds-mid' : odds <= 3.50 ? 'odds-high' : 'odds-very';
-
-    let outcomeHtml = '', gainHtml = '';
-    if (p.outcome === 'win') {
-      outcomeHtml = `<span class="outcome-win">&#10003; Victoire</span>`;
-      gainHtml    = isBet ? `<span class="gain-pos">+$${(mise*(odds-1)).toFixed(2)}</span>` : `<span class="gain-pos">&#10003;</span>`;
-    } else if (p.outcome === 'loss') {
-      outcomeHtml = `<span class="outcome-loss">&#10005; Défaite</span>`;
-      gainHtml    = isBet ? `<span class="gain-neg">-$${mise.toFixed(2)}</span>` : `<span class="gain-neg">&#10005;</span>`;
-    } else if (p.outcome === 'live') {
-      outcomeHtml = `<span class="outcome-live">&#9679; En cours</span>`;
-      gainHtml    = isBet ? `<span class="gain-pot">pot. +$${(mise*(odds-1)).toFixed(2)}</span>` : `<span class="gain-pot">&#9679;</span>`;
-    } else if (p.score_str && p.score_str.startsWith('Report')) {
-      outcomeHtml = `<span style="color:var(--text-dim);font-size:12px">Reporté</span>`;
-      gainHtml    = `<span style="color:var(--text-dim)">—</span>`;
-    } else {
-      const startTxt = p.start_local || 'À venir';
-      outcomeHtml = `<span style="color:var(--text-dim);font-size:12px">&#128336; ${startTxt}</span>`;
-      gainHtml    = isBet ? `<span class="gain-pot">pot. +$${(mise*(odds-1)).toFixed(2)}</span>` : `<span style="color:var(--text-dim)">—</span>`;
-    }
-
-    const scoreHtml = p.score_str
-      ? `<div class="live-score ${p.outcome === 'live' ? 'live' : p.outcome === 'win' || p.outcome === 'loss' ? 'final' : 'pre'}">${p.score_str}</div>`
-      : '';
-
-    const selAbbrev = mlbTeamAbbrev(p.selection || '');
-    const selLogo   = selAbbrev
-      ? `<img src="https://a.espncdn.com/i/teamlogos/mlb/500/${selAbbrev}.png" style="width:44px;height:44px;object-fit:contain" alt="${selAbbrev}" onerror="this.style.display='none'">`
-      : `<span style="font-size:12px;font-weight:600">${p.selection||'?'}</span>`;
-
-    const miseHtml = isBet
-      ? `<span style="color:var(--win);font-weight:700">$${mise.toFixed(2)}</span>`
-      : `<span style="color:var(--text-dim);font-size:11px">—</span>`;
-
-    return `
-      <tr style="${isBet ? '' : 'opacity:0.72'}">
-        <td style="text-align:center">${medal}</td>
-        <td class="match-cell">
-          ${mlbMatchLogosHtml(p.away_team, p.home_team)}
-          <div class="meta" style="text-align:center;margin-top:4px">${p.bet_type||''}</div>
-          ${scoreHtml ? `<div style="text-align:center;margin-top:4px">${scoreHtml}</div>` : ''}
-        </td>
-        <td class="center">${selLogo}</td>
-        <td class="center"><span class="${oddsClass}">${odds.toFixed(2)}</span></td>
-        <td class="center">${miseHtml}</td>
-        <td class="center">${gainHtml}</td>
-        <td class="center">${outcomeHtml}</td>
-      </tr>`;
-  }
-
-  // Trier et afficher tous les matchs
-  const allSorted = [...allMatches].sort(sortFn);
-
-  let rank = 1;
-  allSorted.forEach(p => {
-    if (p.is_bet) {
-      // Match avec pari misé
-      html += makeRow(p, rank, true);
-    } else if (p.bet_type) {
-      // Prédiction analysée (sans mise)
-      html += makeRow(p, rank, false);
-    } else {
-      // Match simple sans pari — affichage simplifié
-      const scoreHtml = p.score_str
-        ? `<div class="live-score pre">${p.score_str}</div>`
-        : '';
-      html += `
-        <tr style="opacity:0.60">
-          <td style="text-align:center"><span style="color:var(--text-dim);font-size:13px">—</span></td>
-          <td class="match-cell">
-            ${mlbMatchLogosHtml(p.away_team, p.home_team)}
-            ${scoreHtml ? `<div style="text-align:center;margin-top:4px">${scoreHtml}</div>` : ''}
-          </td>
-          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
-          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
-          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
-          <td class="center"><span style="color:var(--text-dim);font-size:11px">—</span></td>
-          <td class="center"><span style="color:var(--text-dim);font-size:11px">Aucun pari</span></td>
-        </tr>`;
-    }
-    rank++;
-  });
-
-  html += `</tbody></table></div></div>`;
-  return html;
 }
 
 // ── Onglet V2 ────────────────────────────────────────────────────
