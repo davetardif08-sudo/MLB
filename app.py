@@ -185,6 +185,27 @@ def _start_analysis_thread(bankroll, kelly_frac, max_nightly, top_n, mode="stand
             # Pour l'analyse, on n'utilise que les matchs avec cotes
             matches_for_analysis = matches_with_odds
 
+            # ── Charger les lanceurs partants AVANT l'analyse ──────────────
+            # Critique : les lanceurs représentent 40% de la valeur prédictive.
+            # On charge ici (pas seulement au startup) pour éviter la race condition.
+            try:
+                from mlb_stats import _fetch_todays_pitchers, _pitcher_cache, _find_team_id
+                _fetch_todays_pitchers()
+                print(f"  [app] Lanceurs chargés: {len(_pitcher_cache)} partants")
+
+                # Enrichir les Match avec les noms de lanceurs
+                for m in matches_for_analysis:
+                    home_tid = str(_find_team_id(m.home_team) or "")
+                    away_tid = str(_find_team_id(m.away_team) or "")
+                    if home_tid and home_tid in _pitcher_cache:
+                        m.home_pitcher = _pitcher_cache[home_tid].get("name", "")
+                    if away_tid and away_tid in _pitcher_cache:
+                        m.away_pitcher = _pitcher_cache[away_tid].get("name", "")
+                n_with_sp = sum(1 for m in matches_for_analysis if m.home_pitcher or m.away_pitcher)
+                print(f"  [app] {n_with_sp}/{len(matches_for_analysis)} matchs avec lanceur identifié")
+            except Exception as e:
+                print(f"  [app] Erreur chargement lanceurs: {e}")
+
             from analyzer import OddsAnalyzer
             from predictions import record_opportunity
 
