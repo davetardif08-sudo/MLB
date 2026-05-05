@@ -3220,7 +3220,7 @@ function renderLive(data) {
   const outcomeOrder = { live: 0, win: 1, loss: 2, pending: 3 };
   const sortFn = (a, b) => {
     // D'abord : paris (is_bet=true) avant prédictions (is_bet=false)
-    if (a.is_bet !== b.is_bet) return b.is_bet ? -1 : 1;
+    if (a.is_bet !== b.is_bet) return a.is_bet ? -1 : 1;
     // Puis : par outcome
     return (outcomeOrder[a.outcome] ?? 9) - (outcomeOrder[b.outcome] ?? 9);
   };
