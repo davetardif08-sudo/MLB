@@ -126,7 +126,21 @@ def _scrape_cached(headless: bool = True):
 @app.route('/')
 @login_required
 def index():
+    # Déclencher le cron auto-snapshot à chaque visite (UptimeRobot ping / toutes les 5 min)
+    try:
+        threading.Thread(target=_run_auto_snapshot_bg, daemon=True).start()
+    except Exception:
+        pass
     return render_template('index.html')
+
+
+def _run_auto_snapshot_bg():
+    """Appelle la logique auto-snapshot en arrière-plan (non-bloquant pour le rendu)."""
+    try:
+        with app.app_context():
+            api_cron_auto_snapshot()
+    except Exception as _e:
+        print(f"  [index-cron] {_e}")
 
 
 @app.route('/api/status')
