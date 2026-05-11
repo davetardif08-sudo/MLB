@@ -2604,6 +2604,7 @@ async function loadStats() {
   hide('stats-content');
   hide('stats-empty');
   hide('stats-weights-panel');
+  const _try = (label, fn) => { try { fn(); } catch(e) { console.error('[stats:'+label+']', e); } };
   try {
     const [statsResp, weightsResp, comboHistResp] = await Promise.all([
       fetch('/api/stats'),
@@ -2611,23 +2612,26 @@ async function loadStats() {
       fetch('/api/mlb-combo-history'),
     ]);
     const weightsData = weightsResp.ok ? await weightsResp.json() : null;
-    if (weightsData) { renderWeights(weightsData); show('stats-weights-panel'); }
+    if (weightsData) _try('weights', () => { renderWeights(weightsData); show('stats-weights-panel'); });
     hide('stats-loading');
     if (!statsResp.ok) { show('stats-empty'); return; }
     const data = await statsResp.json();
-    renderStats(data, weightsData);
+    // Afficher le contenu d'abord — chaque rendu est isolé pour éviter qu'une erreur cache tout
+    show('stats-content');
+    _try('renderStats', () => renderStats(data, weightsData));
     if (data.by_date && data.by_date.length) {
-      renderWinrateProgression(data.by_date);
-      renderGainsChart(data.by_date, 'line');  // Afficher aussi le graphique gains cumulatifs
+      _try('winrateProgression', () => renderWinrateProgression(data.by_date));
+      _try('gainsChart',         () => renderGainsChart(data.by_date, 'line'));
     }
-    if (data.calibration && data.calibration.length) renderCalibrationCurve(data.calibration);
-    // Charger aussi le graphique de comparaison des systèmes
-    await loadGainJourChart();
+    if (data.calibration && data.calibration.length)
+      _try('calibrationCurve', () => renderCalibrationCurve(data.calibration));
+    _try('gainJourChart', () => loadGainJourChart());
     if (comboHistResp.ok) {
       const comboData = await comboHistResp.json();
-      renderMLBComboHistory(comboData);
+      _try('mlbComboHistory', () => renderMLBComboHistory(comboData));
     }
   } catch(e) {
+    console.error('[stats] fetch error:', e);
     hide('stats-loading');
     show('stats-empty');
   }
