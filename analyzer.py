@@ -380,6 +380,15 @@ class OddsAnalyzer:
                     if TH.get("downgrade_excellent") and "Excellent" in adj_rec:
                         adj_rec = "Bon **"
 
+                    # ── Filtre : bannir Total "Excellent" ──────────────────────
+                    # Analyse historique (mai 2026, 79 paris) :
+                    #   Total Excellent → 38.7% WR, ROI -$27.49
+                    #   = 76% de la perte totale concentrée ici.
+                    # On exclut du pool de mises mais on garde en info_mode pour
+                    # l'affichage des prédictions.
+                    if is_total and "Excellent" in adj_rec and not info_mode:
+                        continue
+
                     opp = BettingOpportunity(
                         match=match,
                         bet_type=ag.bet_group.bet_type,
