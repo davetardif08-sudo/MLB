@@ -811,6 +811,31 @@ def api_yesterday():
         away_logo = pick.get("away_logo") or _get_mlb_team_logo(pick.get("away_team", ""))
         home_logo = pick.get("home_logo") or _get_mlb_team_logo(pick.get("home_team", ""))
 
+        # Score final du match
+        score_str = pick.get("score_str", "")
+        if not score_str:
+            # Chercher le game dans les résultats MLB
+            home_raw = pick.get("home_team", "")
+            away_raw = pick.get("away_team", "")
+            game_entry = None
+            try:
+                from mlb_stats import _find_team_id
+                h_id = _find_team_id(home_raw)
+                a_id = _find_team_id(away_raw)
+                if h_id:
+                    game_entry = mlb_results.get(str(h_id))
+                if not game_entry and a_id:
+                    game_entry = mlb_results.get(str(a_id))
+            except Exception:
+                pass
+            if not game_entry:
+                game_entry = (mlb_results.get(_normalize_team_name(home_raw))
+                              or mlb_results.get(_normalize_team_name(away_raw)))
+            if game_entry:
+                hs_g = game_entry.get("home_score", 0)
+                as_g = game_entry.get("away_score", 0)
+                score_str = f"Final {as_g}–{hs_g}"
+
         enriched.append({
             **pick,
             "outcome": outcome,
@@ -818,6 +843,7 @@ def api_yesterday():
             "is_bet": is_bet,
             "away_logo": away_logo,
             "home_logo": home_logo,
+            "score_str": score_str,
         })
 
     combo_results = _resolve_combos(snap.get("combos", []), mlb_results)

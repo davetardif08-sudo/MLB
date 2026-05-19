@@ -1918,7 +1918,7 @@ function renderResultCards(records) {
             </div>
           </div>
           <div style="text-align:center; font-size:12px; color:#10b981; font-weight:600; margin: 4px 0 4px 0;">${displayBetType}</div>
-          <div style="text-align:center; font-size:11px; color:var(--text-dim); margin-bottom: 6px;">${r.date||''} ${r.time||''}</div>
+          ${r.score_str ? `<div style="text-align:center; font-size:13px; font-weight:700; color:var(--text); margin-bottom:4px;">${r.score_str}</div>` : `<div style="text-align:center; font-size:11px; color:var(--text-dim); margin-bottom:6px;">${r.date||''} ${r.time||''}</div>`}
           <div class="card-body">
             <div class="card-stats-row">
               <div class="cote">
@@ -1972,7 +1972,7 @@ function renderResultCards(records) {
               </div>
             </div>
           </div>
-          <div style="text-align:center; font-size:11px; color:var(--text-dim); margin: 8px 0 6px 0;">${r.date||''} ${r.time||''}</div>
+          ${r.score_str ? `<div style="text-align:center; font-size:13px; font-weight:700; color:var(--text); margin: 6px 0 6px 0;">${r.score_str}</div>` : `<div style="text-align:center; font-size:11px; color:var(--text-dim); margin: 8px 0 6px 0;">${r.date||''} ${r.time||''}</div>`}
           <div class="card-body">
             <div class="card-stats-row">
               <div class="cote">
