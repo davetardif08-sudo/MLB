@@ -2145,10 +2145,51 @@ function renderGainsChart(byDate, mode) {
     }];
   }
 
+  // ── Marqueur(s) d'évènement(s) à afficher sur le graphique ───────
+  // Ajouter ici toute modification majeure à visualiser sur la timeline.
+  const eventMarkers = [
+    { date: '2026-05-12', label: 'Filtre Total Excellent', color: '#fb923c' },
+  ];
+
+  // Plugin Chart.js : trace une ligne verticale pour chaque évènement
+  const verticalEventLines = {
+    id: 'verticalEventLines',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea || !scales.x) return;
+      eventMarkers.forEach(ev => {
+        // Trouver l'index du jour correspondant (ou le plus proche supérieur)
+        let idx = byDate.findIndex(d => d.date >= ev.date);
+        if (idx < 0) return;  // pas encore de données après cette date
+        const x = scales.x.getPixelForValue(idx);
+        if (x < chartArea.left || x > chartArea.right) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = ev.color;
+        ctx.lineWidth = 2;
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Étiquette
+        ctx.fillStyle = ev.color;
+        ctx.font = '600 11px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const label = ev.label;
+        const labelX = Math.min(x + 6, chartArea.right - ctx.measureText(label).width - 4);
+        ctx.fillText(label, labelX, chartArea.top + 4);
+        ctx.restore();
+      });
+    }
+  };
+
   if (_gainsChart) _gainsChart.destroy();
   _gainsChart = new Chart(document.getElementById('gains-chart'), {
     type: mode === 'bar' ? 'bar' : 'line',
     data: { labels, datasets },
+    plugins: [verticalEventLines],
     options: {
       responsive: true,
       maintainAspectRatio: false,
