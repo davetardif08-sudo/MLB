@@ -2363,7 +2363,7 @@ def api_compare_systems():
     today      = _today_mtl()
     all_picks  = []
     days_out   = []
-    cum        = {k: 0.0 for k in "ABCDEFG"}
+    cum        = {k: 0.0 for k in "ABCDEFGH"}
     bankroll_f = bankroll_start   # bankroll dynamique Système F
 
     for fname in sorted(os.listdir(snap_dir)):
