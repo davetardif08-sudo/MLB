@@ -2343,6 +2343,9 @@ def api_compare_systems():
     def _is_moneyline(bt):
         return any(k in bt.lower() for k in ("gagnant", "2 issues", "winner", "moneyline", "victoire"))
 
+    def _is_total(bt):
+        return any(k in bt.lower() for k in ("total", "plus/moins", "plus\\moins", "over", "under"))
+
     def _is_under(sel):
         return any(k in sel.lower() for k in ("moins", "under"))
 
@@ -2428,8 +2431,10 @@ def api_compare_systems():
         else:
             f_mises = [0.0] * len(valid_day)
 
-        day = {k: {"mise": 0.0, "net": 0.0, "picks": 0, "wins": 0, "losses": 0}
-               for k in "ABCDEFG"}
+        day = {k: {"mise": 0.0, "net": 0.0, "picks": 0, "wins": 0, "losses": 0,
+                   "gross_wins": 0.0, "gross_losses": 0.0,
+                   "max_win": 0.0, "max_loss": 0.0}
+               for k in "ABCDEFGH"}
         day["date"] = date_str
         day["F"]["bankroll_before"] = round(bankroll_f, 2)
         day_f_net = 0.0
@@ -2461,6 +2466,15 @@ def api_compare_systems():
             g_mise = mise_a if g_act else 0
             g_net = _net(g_mise, win) if g_act else 0
 
+            # Système H : Filtres de production actuels (depuis juin 2026)
+            #   - Bannit Total "Excellent" (depuis 12 mai)
+            #   - Bannit cote ≥ 2.50 (depuis 6 juin)
+            #   - Mise = Kelly standard
+            is_total_bet = _is_total(bt)
+            h_act = not (is_total_bet and "Excellent" in rec) and odds < 2.50
+            h_mise = mise_a if h_act else 0
+            h_net = _net(h_mise, win) if h_act else 0
+
             for key, mise_v, net_v, active in [
                 ("A", mise_a, a_net, True),
                 ("B", b_mise, b_net, b_act),
@@ -2469,6 +2483,7 @@ def api_compare_systems():
                 ("E", e_mise, e_net, e_act),
                 ("F", mise_f, f_net, mise_f > 0),
                 ("G", g_mise, g_net, g_act),
+                ("H", h_mise, h_net, h_act),
             ]:
                 if not active:
                     continue
@@ -2477,6 +2492,15 @@ def api_compare_systems():
                 day[key]["net"]    += net_v
                 day[key]["wins"]   += 1 if win else 0
                 day[key]["losses"] += 0 if win else 1
+                # Stats détaillées
+                if win:
+                    day[key]["gross_wins"] += net_v  # gain brut (mise * (odds-1))
+                    if net_v > day[key]["max_win"]:
+                        day[key]["max_win"] = net_v
+                else:
+                    day[key]["gross_losses"] += mise_v  # perte brute (mise)
+                    if mise_v > day[key]["max_loss"]:
+                        day[key]["max_loss"] = mise_v
 
             all_picks.append({
                 "date": date_str,
@@ -2495,9 +2519,11 @@ def api_compare_systems():
         bankroll_f = max(0.0, round(bankroll_f + day_f_net, 2))
         day["F"]["bankroll_after"] = bankroll_f
 
-        for k in "ABCDEFG":
+        for k in "ABCDEFGH":
             day[k]["net"]  = round(day[k]["net"], 2)
             day[k]["mise"] = round(day[k]["mise"], 2)
+            day[k]["gross_wins"]   = round(day[k]["gross_wins"], 2)
+            day[k]["gross_losses"] = round(day[k]["gross_losses"], 2)
             cum[k] = round(cum[k] + day[k]["net"], 2)
             day[k]["cumulative"] = cum[k]
 
@@ -2509,14 +2535,35 @@ def api_compare_systems():
         losses = sum(d[k]["losses"] for d in days_out)
         total  = sum(d[k]["mise"]   for d in days_out)
         net    = cum[k]
+        gross_wins   = sum(d[k]["gross_wins"]   for d in days_out)
+        gross_losses = sum(d[k]["gross_losses"] for d in days_out)
+        max_win  = max((d[k]["max_win"]  for d in days_out), default=0)
+        max_loss = max((d[k]["max_loss"] for d in days_out), default=0)
+        # Soirées profitables vs perdantes (sur les jours où le système a parié)
+        active_days = [d for d in days_out if d[k]["picks"] > 0]
+        prof_nights = sum(1 for d in active_days if d[k]["net"] > 0)
+        loss_nights = sum(1 for d in active_days if d[k]["net"] < 0)
+        flat_nights = sum(1 for d in active_days if d[k]["net"] == 0)
         res = {
-            "picks":      picks,
-            "wins":       wins,
-            "losses":     losses,
-            "cumulative": net,
-            "roi":        round(net / total * 100, 1) if total else 0,
-            "win_rate":   round(wins / (wins + losses) * 100, 1) if (wins + losses) else 0,
-            "total_mise": round(total, 2),
+            "picks":         picks,
+            "wins":          wins,
+            "losses":        losses,
+            "cumulative":    net,
+            "roi":           round(net / total * 100, 1) if total else 0,
+            "win_rate":      round(wins / (wins + losses) * 100, 1) if (wins + losses) else 0,
+            "total_mise":    round(total, 2),
+            "gross_wins":    round(gross_wins, 2),
+            "gross_losses":  round(gross_losses, 2),
+            "avg_mise":      round(total / picks, 2) if picks else 0,
+            "avg_win":       round(gross_wins / wins, 2) if wins else 0,
+            "avg_loss":      round(gross_losses / losses, 2) if losses else 0,
+            "max_win":       round(max_win, 2),
+            "max_loss":      round(max_loss, 2),
+            "active_days":   len(active_days),
+            "prof_nights":   prof_nights,
+            "loss_nights":   loss_nights,
+            "flat_nights":   flat_nights,
+            "avg_per_day":   round(net / len(active_days), 2) if active_days else 0,
         }
         if k == "F":
             res["initial_bankroll"] = bankroll_start
@@ -2526,7 +2573,7 @@ def api_compare_systems():
 
     return jsonify({
         "days":    days_out,
-        "summary": {k: _summary(k) for k in "ABCDEFG"},
+        "summary": {k: _summary(k) for k in "ABCDEFGH"},
         "picks":   all_picks,
         "params":  {"flat": flat_amt, "cap": cap_amt,
                     "bankroll_start": bankroll_start, "nightly_pct": nightly_pct},

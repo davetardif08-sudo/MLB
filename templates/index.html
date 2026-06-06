@@ -3617,6 +3617,9 @@ function renderCmpCards(summary, params) {
     { key:'G', label:'Système G', sub:'Conservateur (Phase 1)',
       desc:'Cotes ≥1.80, bannit totaux, downgrade "Excellent" — stop-loss agressif',
       accent:'#8b5cf6', bg:'rgba(139,92,246,0.08)', border:'rgba(139,92,246,0.25)' },
+    { key:'H', label:'Système H ⭐', sub:'Production actuelle',
+      desc:'Filtres actifs en prod : bannit Total "Excellent" + cote ≥ 2.50 — mise Kelly ½',
+      accent:'#22d3ee', bg:'rgba(34,211,238,0.10)', border:'rgba(34,211,238,0.35)' },
   ];
   container.innerHTML = systems.map(s => {
     const d = summary[s.key] || {};
@@ -3664,11 +3667,30 @@ function renderCmpCards(summary, params) {
           </div>
         </div>
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
-                    display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim)">
-          <span>${d.wins||0}V / ${d.losses||0}D</span>
-          ${s.dynamic
-            ? `<span>Init : ${(d.initial_bankroll||0).toFixed(0)}$ → Final : ${(d.final_bankroll||0).toFixed(2)}$</span>`
-            : `<span>Misé : ${(d.total_mise||0).toFixed(2)}$</span>`}
+                    display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;
+                    font-size:10.5px;color:var(--text-dim)">
+          <div title="Argent misé total"><span style="color:var(--text)">💵 Misé</span>&nbsp;
+            <span style="color:var(--text);font-weight:600">${(d.total_mise||0).toFixed(2)}$</span></div>
+          <div title="Profit net (gains - pertes)"><span style="color:var(--text)">📊 Net</span>&nbsp;
+            <span style="color:${netColor(d.cumulative||0)};font-weight:600">${(d.cumulative||0)>=0?'+':''}${(d.cumulative||0).toFixed(2)}$</span></div>
+          <div title="Gains bruts (somme des paris gagnés)"><span style="color:#3fb950">▲ Gains</span>&nbsp;
+            <span style="color:#3fb950;font-weight:600">+${(d.gross_wins||0).toFixed(2)}$</span></div>
+          <div title="Pertes brutes (somme des paris perdus)"><span style="color:#f85149">▼ Pertes</span>&nbsp;
+            <span style="color:#f85149;font-weight:600">-${(d.gross_losses||0).toFixed(2)}$</span></div>
+          <div title="Mise moyenne par pari">Mise moy&nbsp;<span style="color:var(--text)">${(d.avg_mise||0).toFixed(2)}$</span></div>
+          <div title="Gain moyen par pari gagnant / Perte moyenne par perdant">Moy V/D&nbsp;
+            <span style="color:#3fb950">+${(d.avg_win||0).toFixed(2)}</span> /
+            <span style="color:#f85149">-${(d.avg_loss||0).toFixed(2)}</span></div>
+          <div title="Plus gros gain sur un pari">Max V&nbsp;<span style="color:#3fb950">+${(d.max_win||0).toFixed(2)}$</span></div>
+          <div title="Plus grosse mise perdue">Max D&nbsp;<span style="color:#f85149">-${(d.max_loss||0).toFixed(2)}$</span></div>
+          <div title="Bilan jour-par-jour : profitables / perdantes / nulles" style="grid-column:span 2;text-align:center;margin-top:2px">
+            Soirées :
+            <span style="color:#3fb950;font-weight:600">${d.prof_nights||0}+</span> /
+            <span style="color:#f85149;font-weight:600">${d.loss_nights||0}-</span>
+            ${d.flat_nights ? `/ <span style="color:var(--text-dim)">${d.flat_nights}≈</span>` : ''}
+            · Moy <span style="color:${netColor(d.avg_per_day||0)};font-weight:600">${(d.avg_per_day||0)>=0?'+':''}${(d.avg_per_day||0).toFixed(2)}$/j</span>
+            ${s.dynamic ? `<br><span style="font-size:9.5px">Bankroll : ${(d.initial_bankroll||0).toFixed(0)}$ → <strong>${(d.final_bankroll||0).toFixed(2)}$</strong></span>` : ''}
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -3700,6 +3722,7 @@ function renderCmpChart(days) {
       mk('E — Under seulement',  '#38bdf8', 'E'),
       mk('F — Kelly dynamique',  '#fb923c', 'F'),
       mk('G — Conservateur',     '#8b5cf6', 'G'),
+      { ...mk('H — Prod actuelle','#22d3ee', 'H'), borderWidth: 3 },
     ]},
     options: {
       responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
@@ -3756,6 +3779,7 @@ function renderGainJourChart(days) {
       mk('E — Under seulement',  '#38bdf8', 'E'),
       mk('F — Kelly dynamique',  '#fb923c', 'F'),
       mk('G — Conservateur',     '#8b5cf6', 'G'),
+      { ...mk('H — Prod actuelle','#22d3ee', 'H'), borderWidth: 3 },
     ]},
     options: {
       responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
