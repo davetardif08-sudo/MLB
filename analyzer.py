@@ -389,6 +389,17 @@ class OddsAnalyzer:
                     if is_total and "Excellent" in adj_rec and not info_mode:
                         continue
 
+                    # ── Filtre : bannir cotes ≥ 2.50 ───────────────────────────
+                    # Triangulation 12 mai → 5 juin 2026 (140 paris post-filtre
+                    # Total Excellent) :
+                    #   Cote 2.50-2.79 → WR 32%, ROI -$24.34 (-29% ROI%)
+                    #   Cote 2.10-2.49 → WR 53%, ROI +$42.00 (sweet spot)
+                    # Sans cette tranche : ROI passe de +$27.21 à +$43.01,
+                    # WR de 49.3% à 53.1%. Confiance haute (n=27, 17pts sous
+                    # breakeven).
+                    if sel.selection.odds >= 2.50 and not info_mode:
+                        continue
+
                     opp = BettingOpportunity(
                         match=match,
                         bet_type=ag.bet_group.bet_type,
